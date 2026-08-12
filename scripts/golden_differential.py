@@ -1,15 +1,17 @@
 """Old (calibre_mcp.matching) vs new (calibre_core), read-only, real library."""
-import os, sys, json
+import os
+import sys
+
 os.environ["CALIBRE_LIBRARY"] = "/Users/adam/Calibre Library"
 sys.path.insert(0, "/Users/adam/Research/MCPSuite/calibre-mcp/src")
 sys.path.insert(0, "src")
 
 from calibre_mcp import matching as old
-from calibre_core.records import load_books as new_load
-from calibre_core.search import search as new_search
+
 from calibre_core import duplicates as newdup
 from calibre_core.orphans import orphan_dirs as new_orphans
-from calibre_core.normalize import dedup_key
+from calibre_core.records import load_books as new_load
+from calibre_core.search import search as new_search
 
 fail = 0
 
@@ -57,6 +59,8 @@ print(f"\ndup groups: old={len(og)} new={len(ng)} lost={len(lost)} gained={len(g
 titles = {b.id: b.title for b in books}
 CJK = "぀-ヿ㐀-䶿一-鿿가-힯"
 import re
+
+
 def has_cjk(s): return bool(re.search(f"[{CJK}]", s))
 for g in sorted(lost, key=lambda s: min(s))[:12]:
     ts = [titles[i] for i in sorted(g)]

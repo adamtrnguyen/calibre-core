@@ -22,7 +22,14 @@ from calibre_core.duplicates import (
     size_groups,
     title_groups,
 )
-from calibre_core.isbn import clean_isbn, valid_isbn, valid_isbn10, valid_isbn13
+from calibre_core.isbn import (
+    clean_isbn,
+    hyphenate,
+    to_isbn13,
+    valid_isbn,
+    valid_isbn10,
+    valid_isbn13,
+)
 from calibre_core.library import (
     DEFAULT_LIBRARY,
     LibraryNotFound,
@@ -57,6 +64,8 @@ __all__ = [  # noqa: RUF022
     "title_groups", "size_groups", "isbn_groups", "dupok_pairs", "sha256",
     # integrity
     "orphan_dirs", "missing_formats", "path_case_drift",
-    # isbn
+    # isbn -- to_isbn13 is what matches an ISBN-10 record against an ISBN-13 one,
+    # so a consumer cannot dedupe across the two forms without it.
     "clean_isbn", "valid_isbn", "valid_isbn10", "valid_isbn13",
+    "to_isbn13", "hyphenate",
 ]

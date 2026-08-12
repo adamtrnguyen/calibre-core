@@ -9,7 +9,13 @@ silent:
   omni-rag `normalized_title`      .lower(), `[^a-z0-9]`, NO CJK
       -> every CJK title collapsed to '', and because the caller filtered
          `if key`, those books were dropped from duplicate detection entirely.
-         Not mis-grouped -- absent. That bug is still live in omni-rag.
+         Not mis-grouped -- absent. Real ids 25, 803, 921, 922 all keyed to ''.
+         Fixed 2026-08-12; omni-rag now mirrors this module.
+
+A fourth copy then turned up that no design doc had named:
+`omni-rag/scripts/calibre_openlibrary_metadata_candidates.py`, matching Open
+Library candidates on `[^a-z0-9]` with no NFKD -- so `Juan M. Durán` keyed to
+the single letter 'n'. Four divergent copies is the argument for this package.
 
 Two functions stay, because they are genuinely different jobs and collapsing
 them changes search results:
@@ -40,6 +46,41 @@ _STOPWORDS = r"\b(?:the|a|an)\b"
 _EDITION_NOISE = r"\b(?:edition|ed|revised|rev|si)\b"
 _MANUAL = r"\b(?:solutions?|manual|instructor)\b"
 
+_CJK_CHAR = re.compile(rf"[{CJK}]")
+
+# Dropped from the tail when picking a surname, so 'Heuer Jr.' is not 'jr'.
+_SUFFIXES = frozenset({"jr", "sr", "ii", "iii", "iv", "phd", "md", "esq"})
+
+
+def _fold_diacritics(s: str) -> str:
+    """Strip Latin diacritics WITHOUT touching CJK.
+
+    Keeping CJK in the allowed class is not sufficient on its own: a blanket
+    NFKD + combining-mark strip corrupts CJK before the class is ever applied.
+
+    * Hangul syllables DECOMPOSE into conjoining Jamo (U+1100 block), which
+      `CJK` does not cover -- so every Korean title still collapsed to '', the
+      exact failure this module exists to prevent. `한` -> U+1112 U+1161 U+11AB.
+    * Kana voicing marks decompose into a combining mark that the next line then
+      DELETES: `デザイン` became `テサイン`, `が` became `か`. Voicing is phonemic,
+      so that is a different word, and it lets distinct titles collide.
+
+    So decompose per character and skip CJK codepoints entirely. Non-CJK still
+    goes through NFKD, which is what folds Können -> Konnen and also maps
+    halfwidth/fullwidth forms onto their canonical kana and Latin.
+
+    NFC first because macOS stores filenames decomposed (NFD): recomposing
+    restores Hangul syllables and kana voicing before anything else runs.
+    """
+    out: list[str] = []
+    for ch in unicodedata.normalize("NFC", s or ""):
+        if _CJK_CHAR.match(ch):
+            out.append(ch)
+            continue
+        d = unicodedata.normalize("NFKD", ch)
+        out.append("".join(c for c in d if not unicodedata.combining(c)))
+    return "".join(out)
+
 
 def norm(s: str) -> str:
     """Casefold, strip diacritics, drop punctuation. CJK codepoints survive.
@@ -47,10 +88,7 @@ def norm(s: str) -> str:
     Andersen / Können / Bläsing / Hébert all fold to unaccented forms, so a query
     typed on a US keyboard reaches them.
     """
-    s = unicodedata.normalize("NFKD", s or "")
-    s = "".join(c for c in s if not unicodedata.combining(c))
-    s = s.casefold()
-    return re.sub(rf"[^a-z0-9{CJK}]+", " ", s).strip()
+    return re.sub(rf"[^a-z0-9{CJK}]+", " ", _fold_diacritics(s).casefold()).strip()
 
 
 def dedup_key(title: str, *, drop_manual: bool = False) -> str:
@@ -76,8 +114,7 @@ def dedup_key(title: str, *, drop_manual: bool = False) -> str:
     guarantees a false positive on every single run, which is how a human learns
     to stop reading the output.
     """
-    s = unicodedata.normalize("NFKD", title or "")
-    s = "".join(c for c in s if not unicodedata.combining(c)).casefold()
+    s = _fold_diacritics(title).casefold()
     s = re.sub(r"\(.*?\)|\[.*?\]|（.*?）", " ", s)
     s = re.sub(rf"{_ORDINAL}\s+edition\b", " ", s)
     s = re.sub(_EDITION_NOISE, " ", s)
@@ -91,8 +128,31 @@ def author_surname(authors: str) -> str:
     """First author's surname, casefolded — the discriminator dedup pairs on.
 
     Grouping on title alone makes Lang and Artin's *Algebra* a duplicate.
+
+    A hyphenated surname is ONE name. Taking the last whitespace token of a
+    normalised string returned 'dusseau' for Arpaci-Dusseau, 'brockmann' for
+    Müller-Brockmann and 'mestre' for Mateu-Mestre, because `norm` turns the
+    hyphen into a space. As a discriminator that errs permissive, which is the
+    safe direction for a report, but it is still the wrong name -- and a released
+    tag would freeze it. So the hyphen is kept here.
+
+    Also handles 'Surname, First' (surname-first) and drops middle initials and
+    generational suffixes: 'Richards J. Heuer Jr.' -> 'heuer', where taking the
+    last token gave 'jr'.
     """
     first = (authors or "").split("&")[0].strip()
     if not first:
         return ""
-    return norm(first).split()[-1] if norm(first) else ""
+    if "," in first:
+        first = first.split(",", 1)[0]
+    s = _fold_diacritics(first).casefold()
+    # {CJK} belongs here for the same reason it belongs in norm: without it this
+    # line wipes what _fold_diacritics just protected, and EVERY CJK author keys
+    # to ''. That is worse than a lost name -- callers compare surnames for
+    # equality, so two unrelated CJK authors both keying to '' compare EQUAL.
+    # A CJK personal name has no whitespace-separated surname, so the whole
+    # string is the key; that is consistent, which is all a discriminator needs.
+    s = re.sub(rf"[^a-z0-9\s{CJK}-]+", " ", s)
+    tokens = [t.strip("-") for t in s.split() if t.strip("-")]
+    meaningful = [t for t in tokens if len(t) > 1 and t not in _SUFFIXES]
+    return (meaningful or tokens)[-1] if tokens else ""
