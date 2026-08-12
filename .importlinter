@@ -1,0 +1,19 @@
+# Belt to the pyproject's braces. `dependencies = []` already makes these
+# imports unresolvable; this makes the intent explicit and fails loudly if
+# someone adds a dependency that drags them back in.
+[importlinter]
+root_package = calibre_core
+# Required whenever forbidden_modules names anything outside root_package;
+# without it import-linter errors rather than checking the contract.
+include_external_packages = True
+
+[importlinter:contract:no-transport-or-consumers]
+name = calibre_core must not import MCP, omni-rag, or any consumer
+type = forbidden
+source_modules =
+    calibre_core
+forbidden_modules =
+    mcp
+    fastmcp
+    omnirag
+    lancedb

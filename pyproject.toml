@@ -1,0 +1,27 @@
+[project]
+name = "calibre-core"
+version = "0.1.0"
+description = "Shared read-only access to Adam's Calibre library: one connection chokepoint, one canonical record model, one title normaliser."
+# 3.11, not 3.13: calibre-mcp floors at >=3.13 but omni-rag caps at <3.14, so the
+# core has to sit under both. Develop ON 3.11 or a 3.12+ construct will pass in
+# calibre-mcp and fail in omni-rag.
+requires-python = ">=3.11"
+# Deliberately empty, and this is load-bearing enforcement rather than taste:
+# with no dependencies, `mcp` is not installed in this venv, so a stray
+# `import mcp` cannot even resolve. The dependency direction is unbreakable.
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6", "import-linter>=2.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
