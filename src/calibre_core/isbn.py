@@ -1,38 +1,61 @@
-"""ISBN cleaning and checksum validation.
+"""ISBN cleaning and validation — a thin wrapper over `isbnlib`.
 
-Lifted from omni-rag's calibre_metadata_audit.py so both repos validate the same
-way. A checksum matters here: an ISBN that merely looks well-formed is the kind
-of metadata that gets trusted downstream and then silently identifies the wrong
-edition.
+Previously hand-rolled: ~25 lines reimplementing the ISBN-10 and ISBN-13
+checksums. isbnlib does that, plus canonicalisation and hyphenation, and is
+maintained. Kept as a wrapper rather than used directly at call sites so the
+tolerant input handling ("ISBN: 978-1-119-..." with prefix and punctuation) lives
+in one place and callers do not each re-derive it.
 """
 
 from __future__ import annotations
 
 import re
 
+import isbnlib
+
 
 def clean_isbn(raw: str | None) -> str:
-    """Strip hyphens, spaces and any prefix, upcasing a trailing check 'x'."""
+    """Canonical digits-only form, or '' if it is not an ISBN.
+
+    Tolerates an `ISBN:` prefix, hyphens and spaces, which is how ISBNs actually
+    arrive from copyright pages and scraped metadata. `isbnlib.canonical` alone
+    does not strip a leading prefix.
+    """
     if not raw:
         return ""
-    s = re.sub(r"(?i)^isbn[-: ]*", "", str(raw).strip())
-    return re.sub(r"[^0-9Xx]", "", s).upper()
+    s = re.sub(r"(?i)^\s*isbn(?:-1[03])?\s*[-: ]*", "", str(raw).strip())
+    return isbnlib.canonical(s) or ""
 
 
 def valid_isbn10(s: str) -> bool:
-    if len(s) != 10 or not re.fullmatch(r"[0-9]{9}[0-9X]", s):
-        return False
-    total = sum((10 - i) * (10 if c == "X" else int(c)) for i, c in enumerate(s))
-    return total % 11 == 0
+    return bool(isbnlib.is_isbn10(clean_isbn(s)))
 
 
 def valid_isbn13(s: str) -> bool:
-    if len(s) != 13 or not s.isdigit():
-        return False
-    total = sum((1 if i % 2 == 0 else 3) * int(c) for i, c in enumerate(s))
-    return total % 10 == 0
+    return bool(isbnlib.is_isbn13(clean_isbn(s)))
 
 
 def valid_isbn(raw: str | None) -> bool:
-    s = clean_isbn(raw)
-    return valid_isbn10(s) or valid_isbn13(s)
+    """True if the checksum is correct in either form.
+
+    A checksum matters here: an ISBN that merely looks well-formed gets trusted
+    downstream and then identifies the wrong edition.
+    """
+    c = clean_isbn(raw)
+    return bool(c) and (bool(isbnlib.is_isbn13(c)) or bool(isbnlib.is_isbn10(c)))
+
+
+def to_isbn13(raw: str | None) -> str:
+    """Upgrade an ISBN-10 to its ISBN-13 form, for comparing across editions."""
+    c = clean_isbn(raw)
+    if not c:
+        return ""
+    return isbnlib.to_isbn13(c) or c
+
+
+def hyphenate(raw: str | None) -> str:
+    """Publisher-group hyphenation, for display only. Never for comparison."""
+    c = clean_isbn(raw)
+    if not c:
+        return ""
+    return isbnlib.mask(c) or c

@@ -34,10 +34,17 @@ for q in QUERIES:
     kn = [(r["id"], r["score"]) for r in rn]
     ok = ko == kn
     same += ok
-    print(f"search {q!r:32} old={len(ro):>2} new={len(rn):>2} identical={ok}")
-    if not ok:
+    io, inn = {i for i, _ in ko}, {i for i, _ in kn}
+    lost, gained = io - inn, inn - io
+    verdict = "identical" if ok else ("GAINED-ONLY" if not lost else "LOST RESULTS")
+    print(f"search {q!r:32} old={len(ro):>2} new={len(rn):>2} {verdict}")
+    if lost:
+        # Losing a result is a regression; gaining one is not. The old flat
+        # equality check reported both as failure, which hid the distinction.
         fail += 1
-        print("    old:", ko[:5]); print("    new:", kn[:5])
+        print("    LOST:", sorted(lost))
+    elif gained:
+        print("    gained (not a regression):", sorted(gained))
 print(f"search: {same}/{len(QUERIES)} identical")
 
 # 3. duplicate_groups -> new must be a SUPERSET whose additions are only CJK

@@ -9,7 +9,10 @@ requires-python = ">=3.11"
 # Deliberately empty, and this is load-bearing enforcement rather than taste:
 # with no dependencies, `mcp` is not installed in this venv, so a stray
 # `import mcp` cannot even resolve. The dependency direction is unbreakable.
-dependencies = []
+dependencies = [
+    "isbnlib>=3.10.14",
+    "rapidfuzz>=3.14.5",
+]
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6", "import-linter>=2.0"]
