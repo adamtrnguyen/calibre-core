@@ -149,7 +149,9 @@ def scan_pdf_for_isbns(path: Path, pages_each_end: int, timeout: int) -> dict[st
         str(pages_each_end),
     ]
     try:
-        completed = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=timeout)
+        completed = subprocess.run(
+            cmd, check=False, capture_output=True, text=True, timeout=timeout
+        )
     except subprocess.TimeoutExpired:
         return {"path": str(path), "error": f"timeout after {timeout}s"}
 
@@ -347,7 +349,7 @@ def short_record(r: dict[str, Any]) -> str:
     return f"- `{r['id']}` {r.get('title') or ''} — {r.get('authors') or ''}"
 
 
-def write_markdown(report: dict[str, Any], path: Path) -> None:
+def write_markdown(report: dict[str, Any], path: Path) -> None:  # noqa: C901 - flat single-pass renderer: one section per report key, no nesting
     """Render the report for reading. Lists are capped because the point is a
     queue to work through, not a transcript of the catalogue — the JSON alongside
     it is complete, and every cap prints how many it elided."""
@@ -361,7 +363,8 @@ def write_markdown(report: dict[str, Any], path: Path) -> None:
         "",
         f"- Books: {summary['books']}",
         f"- Records with valid ISBN: {summary['records_with_isbn']}",
-        f"- Existing-ISBN metadata-fill candidates: {summary['safe_existing_isbn_lookup_candidates']}",
+        "- Existing-ISBN metadata-fill candidates: "
+        f"{summary['safe_existing_isbn_lookup_candidates']}",
         f"- PDF ISBN extraction candidates: {summary['pdf_isbn_extraction_candidates']}",
         f"- Scanned PDF candidates: {summary['scanned_pdf_candidates']}",
         f"- Scanned PDFs with ISBN found: {summary['scanned_pdfs_with_isbn']}",
@@ -438,7 +441,8 @@ def _worker_main(argv: list[str] | None = None) -> int:
     ap.add_argument("--scan-one-pdf", type=Path, required=True)
     ap.add_argument("--pages-each-end", type=int, default=8)
     args = ap.parse_args(argv)
-    print(json.dumps(_scan_pdf_text_layer(args.scan_one_pdf, args.pages_each_end), ensure_ascii=False))
+    scanned = _scan_pdf_text_layer(args.scan_one_pdf, args.pages_each_end)
+    print(json.dumps(scanned, ensure_ascii=False))
     return 0
 
 

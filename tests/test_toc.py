@@ -154,7 +154,9 @@ def test_the_gate_fires_before_the_file_is_even_opened(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------
 
 def test_a_missing_file_is_a_returned_reason(tmp_path, gui_closed):
-    out = inject_outline(tmp_path / "gone.pdf", [{"level": 1, "title": "C", "pdf_page": 1}], tmp_path)
+    out = inject_outline(
+        tmp_path / "gone.pdf", [{"level": 1, "title": "C", "pdf_page": 1}], tmp_path
+    )
     assert out == {"ok": False, "reason": "file missing"}
 
 

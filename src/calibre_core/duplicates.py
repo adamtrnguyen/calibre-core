@@ -31,7 +31,12 @@ from calibre_core.normalize import author_surname, dedup_key
 from calibre_core.records import Book, load_books
 
 
-def sha256(path: Path, chunk: int = 1 << 20) -> str:
+def sha256(path: Path | str, chunk: int = 1 << 20) -> str:
+    # `Path | str`, not `Path`: the body only forwards to `open()`, and the callers
+    # in `writes` hold plain strings -- a staged path arrives from the MCP tool
+    # surface as JSON, and the library-side candidate is built with `os.path.join`.
+    # Annotating it `Path` made every real call a type error while working fine at
+    # runtime, which is the annotation being wrong rather than the callers.
     h = hashlib.sha256()
     with open(path, "rb") as fh:
         for block in iter(lambda: fh.read(chunk), b""):

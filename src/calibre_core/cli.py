@@ -180,7 +180,9 @@ def main(argv: list[str] | None = None) -> int:
     p_resolve.add_argument("path", nargs="+")
 
     p_audit = sub.add_parser(
-        "audit", parents=[common], help="metadata-cleanup candidates: thin records + duplicate groups"
+        "audit",
+        parents=[common],
+        help="metadata-cleanup candidates: thin records + duplicate groups",
     )
     p_audit.add_argument("--out-dir", type=Path, default=Path("reports"))
     p_audit.add_argument(
@@ -192,9 +194,15 @@ def main(argv: list[str] | None = None) -> int:
     p_audit.add_argument(
         "--scan-timeout", type=int, default=20, help="seconds before one PDF scan is killed"
     )
-    p_audit.add_argument("--limit-scan", type=int, default=0, help="scan only the first N eligible PDFs")
-    p_audit.add_argument("--progress-every", type=int, default=25, help="0 to silence scan progress")
-    p_audit.add_argument("--scan-workers", type=int, default=4, help="parallel PDF scan subprocesses")
+    p_audit.add_argument(
+        "--limit-scan", type=int, default=0, help="scan only the first N eligible PDFs"
+    )
+    p_audit.add_argument(
+        "--progress-every", type=int, default=25, help="0 to silence scan progress"
+    )
+    p_audit.add_argument(
+        "--scan-workers", type=int, default=4, help="parallel PDF scan subprocesses"
+    )
 
     p_cand = sub.add_parser(
         "metadata-candidates",

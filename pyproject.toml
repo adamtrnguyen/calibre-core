@@ -34,15 +34,46 @@ calibre-core = "calibre_core.cli:main"
 # `set_toc` + verify + `os.replace` on a real file. Mocking pymupdf there would
 # assert that the code calls the functions it calls, and prove nothing about the
 # only thing that matters — that a bad save never becomes the original.
-dev = ["pytest>=8", "ruff>=0.6", "import-linter>=2.0", "pymupdf>=1.24"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "import-linter>=2.0",
+    "pymupdf>=1.24",
+    "ty==0.0.55",  # PINNED: ty is pre-1.0 (0.0.x) — diagnostics change between releases, so an
+                   # unpinned bump can turn `just lint` red with no code change. Bump deliberately.
+                   # Same pin as omni-rag, so the shared package types the same in both.
+    "vulture>=2.14",
+    "codespell>=2.4",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --strict-markers --strict-config"
 
+[tool.codespell]
+# "nd" is a false positive: the ordinal-suffix regex \d+(st|nd|rd|th) that
+# `normalize._ORDINAL` and the frozen pre-extraction baseline both carry.
+# Same entry, same reason, as omni-rag — the normaliser is the shared code.
+ignore-words-list = "nd"
+
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+
+[tool.ruff.lint]
+# Same rule set as omni-rag and the rest of the suite: pycodestyle + pyflakes,
+# import order (I), bugbear (B), pyupgrade (UP), and a complexity ceiling (C901).
+# UP is checked against target-version py311 — see the requires-python note above:
+# a 3.12+ rewrite suggested here would break omni-rag, which caps at <3.14 but
+# still runs 3.11 on the ARC cluster.
+select = ["E", "F", "I", "B", "UP", "C901"]
+
+[tool.ruff.lint.per-file-ignores]
+# The differential harness imports the FROZEN pre-extraction baseline from
+# `scripts/golden/` and the package from `src/`, and puts both on `sys.path` at
+# runtime — so those imports cannot precede the bootstrap that makes them
+# resolvable. Scoped to this one file; E402 stays enabled everywhere else.
+"scripts/golden_differential.py" = ["E402"]
 
 [build-system]
 requires = ["hatchling"]

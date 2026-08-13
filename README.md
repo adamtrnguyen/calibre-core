@@ -118,7 +118,12 @@ exists because a test asserting only Chinese passed for months while Korean was
 silently broken.
 
 ```console
-$ uv run pytest
-$ uv run ruff check .
-$ uv run lint-imports    # this package must not import any consumer
+$ just qa          # the whole gate: lint + anti-sprawl + tests
+$ just test        # pytest alone
+$ just lint        # ruff, ty (types), lint-imports (no consumer may be imported)
+$ just sprawl      # vulture (dead code) + codespell
+$ just audit       # uv lock --check + pip-audit CVE scan; separate, not in `qa`
 ```
+
+`ty` is pinned to an exact version in the dev group: it is pre-1.0, so an
+unpinned bump can turn the gate red with no change to this code.

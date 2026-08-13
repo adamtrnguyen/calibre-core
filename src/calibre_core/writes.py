@@ -42,6 +42,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import sqlite3
 import subprocess
 import time
 
@@ -132,6 +133,85 @@ def backup_db(dest_dir: str) -> str:
 #
 # Keeping them here is what let three copies of one normaliser drift apart in
 # three repos inside a single afternoon.
+#
+# The three signals below are one function each -- not inlined into
+# `check_duplicate` -- because they are independent and answer different
+# questions, and because a single 90-line function tripped ruff's C901. Each keeps
+# the comment explaining what its predecessor got wrong; the ORDER they are called
+# in is the cheapest-first order the docstring promises.
+
+
+def _isbn_signals(con: sqlite3.Connection, isbn: str | None) -> list[dict]:
+    """Exact, free, and decisive.
+
+    `clean_isbn` runs isbnlib.canonical, which REJECTS malformed lengths. The
+    `re.sub(r"[^0-9Xx]","")` it replaced kept anything, so a 12-digit typo could
+    match another 12-digit typo -- garbage matching garbage on a signal whose
+    verdict is `block`.
+    """
+    if not isbn or not (want := clean_isbn(isbn)):
+        return []
+    return [
+        {"signal": "isbn", "book_id": bid, "detail": f"ISBN {val}"}
+        for bid, val in con.execute(
+            "SELECT book, val FROM identifiers WHERE type='isbn'"
+        )
+        if clean_isbn(val) == want
+    ]
+
+
+def _size_signals(rows: list[tuple], staged_path: str | None) -> list[dict]:
+    """Size comes from the catalogue, so no file is read to find a candidate."""
+    if not staged_path or not os.path.exists(staged_path):
+        return []
+    staged_size = os.path.getsize(staged_path)
+    signals: list[dict] = []
+    for r in [r for r in rows if r[6] and int(r[6]) == staged_size]:
+        bid, btitle, bpath, dname, dfmt = r[0], r[1], r[3], r[4], r[5]
+        # A size collision is only a candidate -- confirm by hashing, and hash
+        # ONLY this file so OneDrive hydrates one book, not 1000.
+        cand = os.path.join(str(library_path()), bpath, f"{dname}.{dfmt.lower()}")
+        same_hash = None
+        if os.path.exists(cand):
+            try:
+                same_hash = sha256(cand) == sha256(staged_path)
+            except OSError:
+                same_hash = None
+        signals.append(
+            {
+                "signal": "sha256" if same_hash else "size",
+                "book_id": bid,
+                "detail": (
+                    f"identical file ({staged_size:,} bytes) as {btitle!r}"
+                    if same_hash
+                    else f"same size ({staged_size:,} bytes) as {btitle!r}"
+                    + ("" if same_hash is False else "; hash inconclusive")
+                ),
+            }
+        )
+    return signals
+
+
+def _title_author_signals(
+    rows: list[tuple], title: str | None, authors: str | None
+) -> list[dict]:
+    """Normalised title + surname: cheap, and needs a human."""
+    if not title:
+        return []
+    k, sn = dedup_key(title), author_surname(authors or "")
+    signals: list[dict] = []
+    seen: set[int] = set()
+    for r in rows:
+        bid, btitle, bauth = r[0], r[1], r[2]
+        if bid in seen:
+            continue
+        if dedup_key(btitle) == k and k and author_surname(bauth) == sn:
+            seen.add(bid)
+            signals.append(
+                {"signal": "title+author", "book_id": bid,
+                 "detail": f"{btitle!r} — {bauth}"}
+            )
+    return signals
 
 
 def check_duplicate(
@@ -149,7 +229,6 @@ def check_duplicate(
     warn  -- plausible but needs a human: same normalised title + author
              surname. Suppressed when #dupok already pairs the two records.
     """
-    signals: list[dict] = []
     con = connect()
     try:
         # Two queries, not one join: mixing the authors fan-out with the formats
@@ -176,63 +255,13 @@ def check_duplicate(
             if bid in meta
         ]
 
-        # ---- ISBN: exact, free, and decisive -----------------------------
-        # `clean_isbn` runs isbnlib.canonical, which REJECTS malformed lengths.
-        # The `re.sub(r"[^0-9Xx]","")` it replaced kept anything, so a 12-digit
-        # typo could match another 12-digit typo -- garbage matching garbage on a
-        # signal whose verdict is `block`.
-        if isbn and (want := clean_isbn(isbn)):
-            for bid, val in con.execute(
-                "SELECT book, val FROM identifiers WHERE type='isbn'"
-            ):
-                if clean_isbn(val) == want:
-                    signals.append(
-                        {"signal": "isbn", "book_id": bid, "detail": f"ISBN {val}"}
-                    )
-
-        # ---- size, from the catalogue: no file reads ----------------------
-        staged_size = None
-        if staged_path and os.path.exists(staged_path):
-            staged_size = os.path.getsize(staged_path)
-            size_hits = [r for r in rows if r[6] and int(r[6]) == staged_size]
-            for r in size_hits:
-                bid, btitle, bpath, dname, dfmt = r[0], r[1], r[3], r[4], r[5]
-                # A size collision is only a candidate -- confirm by hashing,
-                # and hash ONLY this file so OneDrive hydrates one book, not 1000.
-                cand = os.path.join(str(library_path()), bpath, f"{dname}.{dfmt.lower()}")
-                same_hash = None
-                if os.path.exists(cand):
-                    try:
-                        same_hash = sha256(cand) == sha256(staged_path)
-                    except OSError:
-                        same_hash = None
-                signals.append(
-                    {
-                        "signal": "sha256" if same_hash else "size",
-                        "book_id": bid,
-                        "detail": (
-                            f"identical file ({staged_size:,} bytes) as {btitle!r}"
-                            if same_hash
-                            else f"same size ({staged_size:,} bytes) as {btitle!r}"
-                            + ("" if same_hash is False else "; hash inconclusive")
-                        ),
-                    }
-                )
-
-        # ---- normalised title + surname: cheap, needs a human ------------
-        if title:
-            k, sn = dedup_key(title), author_surname(authors or "")
-            seen: set[int] = set()
-            for r in rows:
-                bid, btitle, bauth = r[0], r[1], r[2]
-                if bid in seen:
-                    continue
-                if dedup_key(btitle) == k and k and author_surname(bauth) == sn:
-                    seen.add(bid)
-                    signals.append(
-                        {"signal": "title+author", "book_id": bid,
-                         "detail": f"{btitle!r} — {bauth}"}
-                    )
+        # Cheapest first, and in this order: ISBN (a catalogue lookup), size (one
+        # stat, hashing only a collision), title+author (in-memory normalisation).
+        signals: list[dict] = [
+            *_isbn_signals(con, isbn),
+            *_size_signals(rows, staged_path),
+            *_title_author_signals(rows, title, authors),
+        ]
 
         # ---- #dupok suppression, applied to warn-level signals only ------
         pairs = dupok_pairs()
@@ -313,7 +342,11 @@ def add_book(
     if isbn:
         args += ["--identifier", f"isbn:{isbn}"]
     out = _run(args)
-    new_ids = [int(n) for n in re.findall(r"\b(\d+)\b", out.split("ids:")[-1])] if "ids:" in out else []
+    new_ids = (
+        [int(n) for n in re.findall(r"\b(\d+)\b", out.split("ids:")[-1])]
+        if "ids:" in out
+        else []
+    )
     if not new_ids:
         # calibredb can exit 0 having done nothing. Reporting ok=True here would
         # make a no-op indistinguishable from an add.

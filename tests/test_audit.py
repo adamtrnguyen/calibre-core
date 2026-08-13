@@ -47,7 +47,9 @@ def test_progress_reads_book_attributes_not_subscripts(capsys, monkeypatch):
         scan_workers=1,
         progress_every=1,
     )
-    assert out == [{"id": 7, "title": "Scanned", "authors": "An Author", "path": "/tmp/x.pdf", "isbns": []}]
+    assert out == [
+        {"id": 7, "title": "Scanned", "authors": "An Author", "path": "/tmp/x.pdf", "isbns": []}
+    ]
     assert "id=7 Scanned" in capsys.readouterr().err
 
 
@@ -69,7 +71,9 @@ def test_scan_results_come_back_in_the_order_given(monkeypatch):
         audit, "scan_pdf_for_isbns", lambda p, pages, timeout: {"path": str(p), "isbns": []}
     )
     jobs = [(_book(b), Path(f"/tmp/{b}.pdf")) for b in (30, 10, 20)]
-    out = audit.run_pdf_scans(jobs, pages_each_end=2, scan_timeout=5, scan_workers=3, progress_every=0)
+    out = audit.run_pdf_scans(
+        jobs, pages_each_end=2, scan_timeout=5, scan_workers=3, progress_every=0
+    )
     assert [r["id"] for r in out] == [30, 10, 20]
 
 

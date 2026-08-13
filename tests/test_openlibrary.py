@@ -61,7 +61,9 @@ def test_the_best_of_every_title_form_is_used():
 def test_a_subtitle_only_edition_still_matches():
     """The `title: subtitle` form is constructed for exactly this shape."""
     row = {"id": 1, "title": "Algebra: Chapter 0", "authors": "Paolo Aluffi", "isbn": "x"}
-    client = FakeClient({"x": _edition(title="Algebra", subtitle="Chapter 0", authors=["Paolo Aluffi"])})
+    client = FakeClient(
+        {"x": _edition(title="Algebra", subtitle="Chapter 0", authors=["Paolo Aluffi"])}
+    )
     assert ol.enrich(row, client)["status"] == "strong-candidate"
 
 
@@ -197,7 +199,8 @@ def test_build_sorts_strong_candidates_first_and_is_stable(monkeypatch):
     report = {
         "safe_existing_isbn_lookup": [
             {"id": 2, "title": "Exact Match", "authors": "Ann Author", "isbn": "a", "issues": []},
-            {"id": 1, "title": "Different Book", "authors": "Ann Author", "isbn": "b", "issues": []},
+            {"id": 1, "title": "Different Book", "authors": "Ann Author",
+             "isbn": "b", "issues": []},
             {"id": 3, "title": "Gone", "authors": "Ann Author", "isbn": "zzz", "issues": []},
         ]
     }
@@ -309,7 +312,10 @@ def test_two_unrelated_cjk_titles_are_not_a_perfect_match():
     """The sharp end of the CJK bug. A blanket `[^a-z0-9]+` mapped every CJK title
     to '', and SequenceMatcher rates '' against '' as 1.000 — so two entirely
     different Chinese books scored a PERFECT title match."""
-    assert ol.title_similarity("陶哲轩实分析", "人体结构与动态绘制高效练习法") < ol.TITLE_MATCH_THRESHOLD
+    assert (
+        ol.title_similarity("陶哲轩实分析", "人体结构与动态绘制高效练习法")
+        < ol.TITLE_MATCH_THRESHOLD
+    )
 
 
 def test_identical_cjk_titles_still_match():
@@ -321,7 +327,10 @@ def test_an_accent_difference_does_not_block_a_title_match():
     """Calibre and Open Library disagree about accents constantly. Asserted
     against the module's own threshold rather than a hardcoded number, so tuning
     the threshold cannot silently invalidate this."""
-    assert ol.title_similarity("Können: Ein Handbuch", "Konnen: Ein Handbuch") >= ol.TITLE_MATCH_THRESHOLD
+    assert (
+        ol.title_similarity("Können: Ein Handbuch", "Konnen: Ein Handbuch")
+        >= ol.TITLE_MATCH_THRESHOLD
+    )
 
 
 def test_an_accented_surname_is_not_reduced_to_one_letter():

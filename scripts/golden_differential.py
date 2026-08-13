@@ -37,13 +37,22 @@ n = sorted((b.id, b.title, b.authors_str) for b in new_load())
 print(f"load_books: old={len(o)} new={len(n)}  identical={o == n}")
 if o != n:
     fail += 1
-    diff = [x for x in zip(o, n) if x[0] != x[1]][:3]
-    for a, b in diff: print("   OLD", a, "\n   NEW", b)
+    # strict=False on purpose: old and new can legitimately differ in LENGTH
+    # (the counts above are printed separately), and this pairwise walk exists to
+    # show the first few disagreeing rows, not to assert the lengths match.
+    diff = [x for x in zip(o, n, strict=False) if x[0] != x[1]][:3]
+    for a, b in diff:
+        print("   OLD", a, "\n   NEW", b)
 
 # 2. search -> identical ordered results, scores to 3dp
 books = new_load()
+# Every misspelling here is DELIBERATE — the point is that fuzzy search still
+# finds Andersen, Fairchild, "Perspektive" and "Können" through them. The inline
+# directive below is what stops codespell from "fixing" the fixture and quietly
+# turning a typo-tolerance check into an exact-match one.
 QUERIES = ["kirsti anderson", "perspektive", "konnen", "geometry of art",
-           "fairchilde color apearance", "陶哲轩", "zzzqqq nonexistent", "vollmar optik"]
+           "fairchilde color apearance",  # codespell:ignore
+           "陶哲轩", "zzzqqq nonexistent", "vollmar optik"]
 same = 0
 for q in QUERIES:
     ro = old.fuzzy_search(q)
@@ -76,7 +85,10 @@ titles = {b.id: b.title for b in books}
 CJK = "぀-ヿ㐀-䶿一-鿿가-힯"
 
 
-def has_cjk(s): return bool(re.search(f"[{CJK}]", s))
+def has_cjk(s):
+    return bool(re.search(f"[{CJK}]", s))
+
+
 for g in sorted(lost, key=lambda s: min(s))[:12]:
     ts = [titles[i] for i in sorted(g)]
     print("  LOST  ", sorted(g), [t[:38] for t in ts])
@@ -89,7 +101,8 @@ for g in sorted(gained, key=lambda s: min(s))[:12]:
 oo = sorted((d["id"], d["path"]) for d in old.find_orphans())
 no = sorted((d["id"], d["path"]) for d in new_orphans())
 print(f"\norphans: old={len(oo)} new={len(no)} identical={oo == no}")
-if oo != no: fail += 1
+if oo != no:
+    fail += 1
 
 # 5. author_surname -> report every real author the 0.2.0 fixes moved.
 #    NOT a pass/fail check: the fixes are deliberate behaviour changes. It exists

@@ -80,7 +80,9 @@ class LibraryBuilder:
             else:
                 aid = self._next_author
                 self._next_author += 1
-                con.execute("INSERT INTO authors (id, name, sort) VALUES (?,?,?)", (aid, name, name))
+                con.execute(
+                    "INSERT INTO authors (id, name, sort) VALUES (?,?,?)", (aid, name, name)
+                )
             con.execute(
                 "INSERT OR IGNORE INTO books_authors_link (book, author) VALUES (?,?)",
                 (book_id, aid),

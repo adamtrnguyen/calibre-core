@@ -188,7 +188,9 @@ def test_audit_writes_both_report_files_and_prints_where(library, capsys, tmp_pa
     assert out["issue_counts"]["junk-title"] == 1
 
 
-def test_audit_honours_library_like_every_other_subcommand(library_at, capsys, tmp_path, guard_real_library):
+def test_audit_honours_library_like_every_other_subcommand(
+    library_at, capsys, tmp_path, guard_real_library
+):
     """`--library` is threaded through `CALIBRE_LIBRARY`, so it must reach the
     audit too -- `guard_real_library` points the env at nothing, so a subcommand
     that ignored the flag would fail rather than quietly read the live library."""
