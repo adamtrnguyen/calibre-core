@@ -6,9 +6,11 @@ omni-rag's UUID resolver, and one script opened the same metadata.db with a bare
 read-write `sqlite3.connect()` for a SELECT. Read-only-by-construction that
 depends on whoever writes the next call site remembering is not a guarantee.
 
-Writes are deliberately absent and will not be added. They belong in calling
-code via `calibredb` / `calibre-debug` new_api, because Calibre maintains derived
-state (path layout, search caches, link tables) that direct SQL desynchronises.
+`connect()` is READ-ONLY and stays that way -- there is no write connection here
+and there will not be one. The package's writes live in `writes.py` and shell out
+to `calibredb`, because Calibre maintains derived state (path layout, search
+caches, link tables) that direct SQL desynchronises. The rule is "no write ever
+issues SQL against metadata.db", not "no writes in this package".
 """
 
 from __future__ import annotations

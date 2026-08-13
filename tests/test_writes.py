@@ -1,0 +1,323 @@
+"""Tests for the gated write path.
+
+These exist because `writes.py` is now the only sanctioned route for adding a
+book or changing metadata — `calibredb add` and `calibredb set_metadata` are
+denied in Claude Code's permission settings. A silent regression here would
+reopen exactly the defects the gate was built to stop:
+
+  * a byte-identical file catalogued twice under two titles (found in the real
+    library: two records, same sha256, ~50 MB wasted, invisible to any
+    title-based check)
+  * a record with title and author swapped, from `calibredb add` parsing a
+    filename as "Title - Author" when the source named it "Author - Title"
+  * a rename that moves a directory with no possible rollback
+
+Every test runs against a throwaway library. None touches the real one.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+import unicodedata
+
+import pytest
+
+from calibre_core.writes import (
+    WriteBlocked,
+    _merge_identifiers,
+    add_book,
+    check_duplicate,
+    dedup_key,
+    remove_identifier,
+    set_book_metadata,
+)
+
+# --------------------------------------------------------------------------
+# dedup_key — the normaliser. Its bugs are silent and expensive.
+# --------------------------------------------------------------------------
+
+def test_editions_collapse_to_one_key():
+    """Two editions of one work must group, so the pair surfaces for review."""
+    assert dedup_key("The Craft of Research (4th Edition)") == dedup_key(
+        "The Craft of Research, Fifth Edition"
+    )
+
+
+def test_subtitle_is_kept_so_series_volumes_stay_distinct():
+    """Regression: stripping after ':' collapsed 9 Morpho volumes into one group.
+
+    That produced 11 bogus duplicate groups over 32 records in the real library.
+    """
+    keys = {
+        dedup_key("Morpho: Simplified Forms"),
+        dedup_key("Morpho: Hands and Feet"),
+        dedup_key("Morpho: Muscled Bodies"),
+    }
+    assert len(keys) == 3
+
+
+def test_ordinal_only_stripped_before_the_word_edition():
+    """'Second Edition' loses its ordinal; 'The Second Tutorial' keeps it."""
+    assert "second" not in dedup_key("Some Book, Second Edition")
+    assert "second" in dedup_key("The Second Tutorial")
+
+
+def test_cjk_titles_survive_normalisation():
+    """Regression: a `[^a-z0-9]` strip mapped every CJK title to '', so those
+    books vanished from duplicate detection entirely."""
+    a, b = dedup_key("陶哲轩实分析"), dedup_key("线性代数")
+    assert a and b and a != b
+
+
+def test_hangul_survives_because_nfkd_decomposes_it_into_jamo():
+    """The test above passed while Korean was still broken, because it only
+    asserted Chinese. Keeping 가-힯 in the allowed class is NOT sufficient: NFKD
+    decomposes 한 into conjoining Jamo (U+1112 U+1161 U+11AB) in the U+1100
+    block, which that class does not cover.
+
+    Synthetic on purpose: the library's only Korean title (393) carries it in a
+    parenthetical that dedup_key strips anyway, so that record never collapsed.
+    The defect was still live in this gate -- it just had no real witness."""
+    assert dedup_key("한국어 해부학")
+    assert dedup_key("매일 스케치 인물") != dedup_key("한국어 해부학")
+
+
+def test_hangul_survives_from_decomposed_input():
+    """macOS stores filenames NFD, so a title can arrive already decomposed."""
+    assert dedup_key(unicodedata.normalize("NFD", "한국어")) == dedup_key("한국어")
+
+
+def test_kana_voicing_is_not_stripped_as_a_diacritic():
+    """NFKD splits the dakuten off as a combining mark and the diacritic strip
+    deleted it: ドキドキ became トキトキ and が became か (books 922, 923). Voicing
+    is phonemic, so that is a different word and distinct titles can collide."""
+    assert "ドキドキ" in dedup_key("ちょっとドキドキする女の子")
+    assert dedup_key("が") != dedup_key("か")
+
+
+def test_accents_normalise_so_hebert_matches_hebert():
+    assert dedup_key("Hébert Optics") == dedup_key("Hebert Optics")
+
+
+def test_halfwidth_kana_folds_onto_fullwidth():
+    """Non-CJK still goes through NFKD, which is what makes a halfwidth title
+    reachable from a fullwidth query."""
+    assert dedup_key("ｷｬﾗｸﾀｰ") == dedup_key("キャラクター")
+
+
+# --------------------------------------------------------------------------
+# check_duplicate — verdict tiers
+# --------------------------------------------------------------------------
+
+def test_identical_file_blocks(library):
+    """sha256 match is a hard stop: no judgement is required."""
+    staged = library.add(1, "Applied Photographic Optics: Lenses", authors="Sidney F. Ray")
+    r = check_duplicate(staged_path=str(staged), title="Applied Photographic Optics",
+                        authors="Sidney F. Ray")
+    assert r["verdict"] == "block"
+    assert any(s["signal"] == "sha256" for s in r["signals"])
+
+
+def test_same_isbn_blocks(library):
+    library.add(1, "Some Book", authors="A Writer", isbn="9781119744825")
+    r = check_duplicate(title="Totally Different Title", authors="Other Person",
+                        isbn="978-1-119-74482-5")
+    assert r["verdict"] == "block"
+    assert any(s["signal"] == "isbn" for s in r["signals"])
+
+
+def test_isbn_matching_ignores_punctuation(library):
+    """Hyphenation must not defeat the check — the same ISBN is written both ways."""
+    library.add(1, "Some Book", authors="A Writer", isbn="978-1-119-74482-5")
+    r = check_duplicate(title="X", authors="Y", isbn="9781119744825")
+    assert r["verdict"] == "block"
+
+
+def test_same_title_and_author_only_warns(library):
+    """A title+author match needs a human: it could be two editions."""
+    library.add(1, "Systems Thinking, Systems Practice", authors="Peter Checkland")
+    r = check_duplicate(title="Systems Thinking, Systems Practice", authors="Peter Checkland")
+    assert r["verdict"] == "warn"
+
+
+def test_dupok_suppresses_the_warning(library):
+    """A pair explicitly marked deliberate must stop nagging on every run."""
+    library.add_dupok_column()
+    library.add(2, "The Craft of Research (4th Edition)", authors="Wayne C. Booth")
+    library.add(131, "The Craft of Research, Fifth Edition", authors="Wayne C. Booth")
+    library.pair_dupok(2, 131)
+    library.pair_dupok(131, 2)
+    r = check_duplicate(title="The Craft of Research, Fifth Edition", authors="Wayne C. Booth")
+    assert r["verdict"] == "ok"
+
+
+def test_unrelated_book_is_ok(library):
+    library.add(1, "Something Else Entirely", authors="Nobody Relevant")
+    r = check_duplicate(title="A Book That Does Not Exist Here", authors="Unknown Person")
+    assert r["verdict"] == "ok"
+    assert r["signals"] == []
+
+
+def test_different_author_same_title_does_not_block(library):
+    """Lang vs Artin 'Algebra' are different books, not duplicates."""
+    library.add(1, "Algebra", authors="Serge Lang")
+    r = check_duplicate(title="Algebra", authors="Michael Artin")
+    assert r["verdict"] == "ok"
+
+
+# --------------------------------------------------------------------------
+# set_book_metadata — refusals that prevent unrecoverable damage
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("field", ["title", "authors", "Title", "AUTHORS"])
+def test_rename_fields_are_refused(library, field):
+    """Both rename the on-disk directory, and a metadata.db rollback reverts the
+    catalogue but not the filesystem — so there is no undo, only forward repair."""
+    library.add(1, "A Book", authors="An Author")
+    with pytest.raises(WriteBlocked) as e:
+        set_book_metadata(1, {field: "Something New"})
+    assert "rollback" in str(e.value).lower() or "gui" in str(e.value).lower()
+
+
+def test_protected_field_refused_even_alongside_a_safe_one(library):
+    """A mixed write must be refused whole, not partially applied."""
+    library.add(1, "A Book", authors="An Author")
+    with pytest.raises(WriteBlocked):
+        set_book_metadata(1, {"tags": "safe-tag", "title": "Sneaky Rename"})
+
+
+# --------------------------------------------------------------------------
+# identifier merging
+#
+# `calibredb set_metadata --field identifiers:...` REPLACES the whole set. Doing
+# it plainly on real book 256 deleted its `zotero` identifier -- the link to the
+# Zotero facade item, so its citations and zotero:// deep links -- while setting
+# an ISBN. Nothing in calibredb's output announced the loss.
+# --------------------------------------------------------------------------
+
+def test_setting_one_identifier_preserves_the_others(library):
+    """The regression that cost book 256 its Zotero link."""
+    library.add(1, "A Book", authors="An Author", isbn="9780367860271")
+    con = sqlite3.connect(library.db)
+    con.execute("INSERT INTO identifiers (book, type, val) VALUES (1,'zotero','TSV8YEFG')")
+    con.commit()
+    con.close()
+
+    merged = _merge_identifiers(1, "isbn:9781909414310")
+    assert "zotero:TSV8YEFG" in merged
+    assert "isbn:9781909414310" in merged
+    assert "isbn:9780367860271" not in merged  # same type overwrites
+
+
+def test_merging_adds_a_new_type_without_disturbing_existing(library):
+    library.add(2, "Another Book", authors="Some Author", isbn="9780367860271")
+    merged = _merge_identifiers(2, "doi:10.1000/xyz")
+    assert "isbn:9780367860271" in merged
+    assert "doi:10.1000/xyz" in merged
+
+
+def test_merge_ignores_malformed_pairs(library):
+    library.add(3, "Third", authors="Third Author", isbn="9780367860271")
+    merged = _merge_identifiers(3, "garbage-no-colon, ,isbn:9781909414310")
+    assert merged == "isbn:9781909414310"
+
+
+# --------------------------------------------------------------------------
+# add_book preflight
+#
+# The add path itself cannot be tested — `calibredb add` rewrites a fixture
+# library to 48 tables and drops every row. Only the checks that raise BEFORE
+# calibredb is reached are exercisable here.
+# --------------------------------------------------------------------------
+
+def test_extensionless_staged_file_is_refused(tmp_path):
+    """Given no extension calibredb exits 0, prints nothing, and adds nothing.
+    Caught for real: a download saved as `/tmp/dl-<md5>` returned ok=True with
+    an empty book_ids list, which reads as success."""
+    staged = tmp_path / "dl-0618f00fbb4e4cb4654e5a833d5be2a8"
+    staged.write_bytes(b"%PDF-1.4\nno extension\n")
+    with pytest.raises(WriteBlocked, match="no extension"):
+        add_book(str(staged), title="A Book", authors="An Author")
+
+
+def test_missing_staged_file_is_refused(tmp_path):
+    with pytest.raises(WriteBlocked, match="does not exist"):
+        add_book(str(tmp_path / "absent.pdf"), title="A Book", authors="An Author")
+
+
+def test_add_still_demands_title_and_authors(tmp_path):
+    """The extension check must not preempt the inverted-record guard."""
+    staged = tmp_path / "book.pdf"
+    staged.write_bytes(b"%PDF-1.4\n")
+    with pytest.raises(WriteBlocked, match="mandatory"):
+        add_book(str(staged), title="", authors="")
+
+
+# --------------------------------------------------------------------------
+# the fixture itself — if this drifts, every test above is meaningless
+# --------------------------------------------------------------------------
+
+def test_fixture_writes_both_db_row_and_file(library):
+    """Half a fixture silently exercises half the code: find_orphans walks the
+    tree while everything else reads the DB."""
+    staged = library.add(7, "Both Halves", authors="Some Author")
+    assert staged.exists()
+    con = sqlite3.connect(f"file:{library.db}?mode=ro", uri=True)
+    assert con.execute("SELECT COUNT(*) FROM books WHERE id=7").fetchone()[0] == 1
+    assert con.execute("SELECT uncompressed_size FROM data WHERE book=7").fetchone()[0] == len(
+        b"%PDF-1.4\nfixture\n"
+    )
+    con.close()
+
+
+def test_missing_file_case_is_representable(library):
+    """on_disk=False gives the A1 violation: a row whose format file is absent."""
+    staged = library.add(8, "Ghost Format", on_disk=False)
+    assert not staged.exists()
+    con = sqlite3.connect(f"file:{library.db}?mode=ro", uri=True)
+    assert con.execute("SELECT COUNT(*) FROM data WHERE book=8").fetchone()[0] == 1
+    con.close()
+
+
+def test_remove_identifier_refuses_a_no_op(library):
+    """A removal that removes nothing must fail loudly, not report success — the
+    caller has misidentified the record or the type, and a cheerful ok=True there
+    would hide it."""
+    library.add(1, "A Book", authors="An Author", isbn="9780367860271")
+    with pytest.raises(WriteBlocked, match="no 'doi' identifier"):
+        remove_identifier(1, "doi")
+
+
+def test_remove_identifier_is_a_separate_function_from_the_merging_setter(library):
+    """Removal is deliberately NOT expressible through set_book_metadata, which
+    merges. Book 256 lost its zotero link because a plain identifier write
+    replaced the whole set; the fix made that path merge, which in turn made
+    removal unreachable there — on purpose. This asserts the two are distinct
+    entry points so a later refactor cannot quietly fold them together."""
+    import calibre_core.writes as w
+
+    assert w.remove_identifier is not w.set_book_metadata
+    assert "id_type" in w.remove_identifier.__code__.co_varnames
+
+
+def test_dupok_does_not_excuse_a_pair_against_the_whole_library(library):
+    """The flattened-allowlist bug, demonstrated.
+
+    The old code collected every #dupok partner id into ONE set and suppressed a
+    title+author signal on mere membership. So if an unrelated record named books
+    1 and 2 as ITS partners, both became excused against everything -- and a
+    genuine unexplained duplicate between 1 and 2 reported `ok`.
+
+    Suppression must require the two matched records to be paired with EACH
+    OTHER, not merely to appear somewhere in the column."""
+    library.add_dupok_column()
+    library.add(1, "Shared Title", authors="One Author")
+    library.add(2, "Shared Title", authors="One Author")
+    library.add(99, "Something Unrelated Entirely", authors="Other Person")
+    # 99 names both 1 and 2. Under the old flattening this excused them.
+    library.pair_dupok(99, 1)
+    library.pair_dupok(99, 2)
+
+    r = check_duplicate(title="Shared Title", authors="One Author")
+    assert r["verdict"] == "warn", "a real duplicate was excused by an unrelated pairing"
+    assert {s["book_id"] for s in r["signals"] if s["signal"] == "title+author"} == {1, 2}
