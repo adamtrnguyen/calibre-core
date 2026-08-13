@@ -199,3 +199,25 @@ def library_at():
 def guard_real_library(monkeypatch):
     """Make the real library unreachable, so a test that forgets to redirect fails loudly."""
     monkeypatch.setenv("CALIBRE_LIBRARY", "/nonexistent/definitely-not-a-library")
+
+
+@pytest.fixture(autouse=True)
+def _gui_closed(monkeypatch, request):
+    """Stub the Calibre-GUI check for every test that doesn't opt out.
+
+    Without this the suite depends on the DEVELOPER's Calibre being closed: 287
+    tests passed with it shut and 6 failed the moment it was opened, all with
+    "Calibre GUI is open". A gate that reads real process state makes a real
+    process a test fixture.
+
+    Tests that exercise the gate itself request `gui_open` instead.
+    """
+    if "gui_open" in request.fixturenames:
+        return
+    monkeypatch.setattr("calibre_core.writes.gui_is_open", lambda: False)
+
+
+@pytest.fixture()
+def gui_open(monkeypatch):
+    """Opt out of `_gui_closed` and assert the gate fires."""
+    monkeypatch.setattr("calibre_core.writes.gui_is_open", lambda: True)

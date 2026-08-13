@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import sqlite3
 import unicodedata
+from pathlib import Path
 
 import pytest
 
@@ -170,13 +171,16 @@ def test_different_author_same_title_does_not_block(library):
 # --------------------------------------------------------------------------
 
 @pytest.mark.parametrize("field", ["title", "authors", "Title", "AUTHORS"])
-def test_rename_fields_are_refused(library, field):
-    """Both rename the on-disk directory, and a metadata.db rollback reverts the
-    catalogue but not the filesystem — so there is no undo, only forward repair."""
+def test_rename_fields_are_refused_by_default(library, field):
+    """Neither is writable without asking for it, and the check is case-insensitive.
+
+    They are refused for DIFFERENT reasons and only `title` has a way through — see
+    the three tests at the bottom of this file. The earlier version of this test
+    asserted one shared reason ("rollback"), which is what hid that they are not
+    equivalent."""
     library.add(1, "A Book", authors="An Author")
-    with pytest.raises(WriteBlocked) as e:
+    with pytest.raises(WriteBlocked):
         set_book_metadata(1, {field: "Something New"})
-    assert "rollback" in str(e.value).lower() or "gui" in str(e.value).lower()
 
 
 def test_protected_field_refused_even_alongside_a_safe_one(library):
@@ -321,3 +325,66 @@ def test_dupok_does_not_excuse_a_pair_against_the_whole_library(library):
     r = check_duplicate(title="Shared Title", authors="One Author")
     assert r["verdict"] == "warn", "a real duplicate was excused by an unrelated pairing"
     assert {s["book_id"] for s in r["signals"] if s["signal"] == "title+author"} == {1, 2}
+
+
+# --------------------------------------------------------------------------
+# title vs authors — the blanket refusal was wrong, and they are not equivalent
+# --------------------------------------------------------------------------
+
+def test_authors_is_refused_even_with_force(library):
+    """A relocation, not a rename: the book moves to a DIFFERENT author directory,
+    leaving the old one possibly empty and the record somewhere no `(id)` walk from
+    the previous location reaches. No force flag opens this."""
+    library.add(1, "A Book", authors="Old Name")
+    for force in (False, True):
+        with pytest.raises(WriteBlocked, match="different author directory"):
+            set_book_metadata(1, {"authors": "New Name"}, force=force)
+
+
+def test_title_is_refused_by_default_but_names_the_way_through(library):
+    """Refused unless asked for deliberately — but the message has to say HOW,
+    or the caller concludes it is impossible and goes around the gate."""
+    library.add(1, "A Book")
+    with pytest.raises(WriteBlocked, match="force=True") as e:
+        set_book_metadata(1, {"title": "Better Title"})
+    assert e.value.detail["hint"] == "force=True"
+
+
+def test_the_old_blanket_refusal_is_gone(library, monkeypatch):
+    """Regression lock on the CHANGE. `title` and `authors` were refused together
+    with the reason "a rename moves the directory and no rollback exists" — which
+    does not survive scrutiny, because `add_book` orphans a directory on rollback
+    too and is allowed. Only `authors` deserved an absolute rule.
+
+    Stops at the gate: `_run` is stubbed, so this asserts what the gate permits,
+    not what calibredb does with it.
+    """
+    library.add(1, "A Book")
+    monkeypatch.setattr("calibre_core.writes._run", lambda args: "ok")
+    out = set_book_metadata(1, {"title": "Better Title"}, force=True)
+    assert out["ok"] is True
+
+
+def test_a_title_write_still_backs_up_first(library, monkeypatch):
+    """force=True relaxes WHICH field, never the preconditions around it."""
+    library.add(1, "A Book")
+    monkeypatch.setattr("calibre_core.writes._run", lambda args: "ok")
+    out = set_book_metadata(1, {"title": "Better Title"}, force=True)
+    assert Path(out["db_backup"]).exists()
+
+
+def test_a_title_write_still_refuses_while_the_gui_is_open(library, monkeypatch):
+    """The GUI gate is not a field-level rule and force must not reach it —
+    calibredb corrupts state if it writes while Calibre is running."""
+    library.add(1, "A Book")
+    monkeypatch.setattr("calibre_core.writes.gui_is_open", lambda: True)
+    with pytest.raises(WriteBlocked, match="GUI is open"):
+        set_book_metadata(1, {"title": "Better Title"}, force=True)
+
+
+def test_other_fields_never_needed_force(library, monkeypatch):
+    """Guard against the flag leaking into a general requirement — comments, tags
+    and pubdate rename nothing and must stay reachable without it."""
+    library.add(1, "A Book")
+    monkeypatch.setattr("calibre_core.writes._run", lambda args: "ok")
+    assert set_book_metadata(1, {"comments": "a note", "tags": "x"})["ok"] is True

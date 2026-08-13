@@ -438,27 +438,64 @@ def set_book_metadata(
     book_id: int,
     fields: dict[str, str],
     backup_dir: str = "/tmp/calibre-db-backups",
+    force: bool = False,
 ) -> dict:
     """Set metadata fields on one record via `calibredb set_metadata --field`.
 
     Targeted per-field writes only -- pushing a whole OPF overwrites local tags,
     which are knowledge this library keeps and no online source has.
 
-    Refuses to touch `title` or `authors`: both rename the on-disk directory, and
-    since a metadata.db rollback does not revert the filesystem there is no undo.
-    Do those in the Calibre GUI, which moves files transactionally.
-
     `identifiers` is MERGED over what the record already has -- see
     `_merge_identifiers` for why a plain write is destructive.
+
+    TITLE AND AUTHORS
+    -----------------
+    Both used to be refused outright, with the reason "a rename moves the
+    directory and no rollback exists". That reason does not survive scrutiny:
+    `add_book` orphans a directory on rollback too, and it is allowed. The two
+    fields are also not equivalent, which the old blanket rule hid.
+
+    `title` (allowed with force=True) renames the directory in place. What it
+    does NOT touch is anything identity-bearing -- verified against the schema:
+    `uuid=uuid4()` fires only in `books_insert_trg` (AFTER INSERT), there is no
+    UPDATE trigger on `books` at all, and `books.id` is untouched. So:
+
+      * the `(id)` suffix still resolves -- `paths.book_id_from_dir`,
+        `resolve_path`, and omni-rag's uuid resolver all keep working;
+      * `calibre://view-book-uuid/.../<uuid>` deep links keep working;
+      * omni-rag's `chunk_id = sha1(uuid|page|idx|text)` is stable, so no
+        duplicate rows and no re-ingest is needed.
+
+    The one real consequence is cosmetic and STICKY: omni-rag stores `book` as a
+    display string derived from the catalogue title, so an indexed book keeps
+    showing the old one -- and because resume dedupes by uuid, a re-ingest SKIPS
+    the book rather than refreshing it. Refreshing it means deleting its rows
+    first. Worth knowing before renaming something already indexed.
+
+    `authors` stays refused unconditionally. That is a relocation, not a rename:
+    the book moves to a different author directory, leaving the old one possibly
+    empty, and the record ends up somewhere no `(id)` walk from the previous
+    location reaches. Do it in the GUI, which moves files transactionally.
     """
     if gui_is_open():
         raise WriteBlocked("Calibre GUI is open — close it before writing")
-    protected = {"title", "authors"} & {k.lower() for k in fields}
-    if protected:
+
+    lowered = {k.lower() for k in fields}
+    if "authors" in lowered:
+        # STILL ABSOLUTE, and for a different reason than title. Changing authors
+        # moves the book to a DIFFERENT author directory, so the old one may be
+        # left behind empty and the record lands somewhere no `(id)` walk from the
+        # previous location reaches. That is a relocation, not a rename.
         raise WriteBlocked(
-            f"refusing to set {sorted(protected)} — a rename moves the directory "
-            "and no rollback exists; use the Calibre GUI",
-            {"fields": sorted(protected)},
+            "refusing to set 'authors' — that moves the book to a different author "
+            "directory, not just a rename; use the Calibre GUI",
+            {"fields": ["authors"]},
+        )
+    if "title" in lowered and not force:
+        raise WriteBlocked(
+            "setting 'title' renames the on-disk directory — pass force=True once you "
+            "have read what goes stale (see this function's docstring)",
+            {"fields": ["title"], "hint": "force=True"},
         )
     fields = dict(fields)
     merged_note = None
