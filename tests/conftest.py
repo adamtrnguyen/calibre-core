@@ -182,6 +182,18 @@ def library(tmp_path, monkeypatch):
 
 
 @pytest.fixture()
+def library_at():
+    """The builder itself, for tests where the library's LOCATION is under test.
+
+    `library` fixes both the root and `CALIBRE_LIBRARY`, which is right for almost
+    everything and wrong for the two shapes `paths.resolve_path` has to handle: a
+    root reached through a symlink (the real OneDrive library), and a staged export
+    that is deliberately NOT the configured library.
+    """
+    return LibraryBuilder
+
+
+@pytest.fixture()
 def guard_real_library(monkeypatch):
     """Make the real library unreachable, so a test that forgets to redirect fails loudly."""
     monkeypatch.setenv("CALIBRE_LIBRARY", "/nonexistent/definitely-not-a-library")

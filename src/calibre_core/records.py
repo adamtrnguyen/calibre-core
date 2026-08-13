@@ -71,28 +71,31 @@ def _split(s: str | None, sep: str) -> tuple[str, ...]:
     return tuple(x.strip() for x in (s or "").split(sep) if x.strip())
 
 
-def load_books(db: Path | None = None) -> list[Book]:
-    """Every book, with formats resolved to absolute paths.
+def _query(db: Path | None, root: Path, book_id: int | None = None) -> list[Book]:
+    """The one place a Book is built from rows. `book_id` narrows both queries.
 
     One query for books plus one for formats — never a single join across both
     the authors and formats fan-outs, which multiplies rows. (And
     `GROUP_CONCAT(DISTINCT x, sep)` is a syntax error in SQLite: DISTINCT
     aggregates take exactly one argument.)
     """
-    lib = library_path()
+    where = " WHERE b.id = ?" if book_id is not None else ""
+    args: tuple = (book_id,) if book_id is not None else ()
     con = connect(db)
     try:
-        rows = con.execute(_BOOKS_SQL).fetchall()
+        rows = con.execute(_BOOKS_SQL + where, args).fetchall()
         fmts: dict[int, list[tuple[Path, int]]] = {}
         # books.path is needed to build each format's absolute path, so collect
         # it from the rows above rather than re-querying per format.
         paths = {r[0]: r[2] for r in rows}
         for bid, name, fmt, size in con.execute(
             "SELECT book, name, format, uncompressed_size FROM data"
+            + (" WHERE book = ?" if book_id is not None else ""),
+            args,
         ):
             if bid in paths:
                 fmts.setdefault(bid, []).append(
-                    (lib / paths[bid] / f"{name}.{str(fmt).lower()}", int(size or 0))
+                    (root / paths[bid] / f"{name}.{str(fmt).lower()}", int(size or 0))
                 )
     finally:
         con.close()
@@ -120,8 +123,27 @@ def load_books(db: Path | None = None) -> list[Book]:
     return out
 
 
-def get_book(book_id: int, db: Path | None = None) -> Book | None:
-    return next((b for b in load_books(db) if b.id == book_id), None)
+def load_books(db: Path | None = None, *, root: Path | None = None) -> list[Book]:
+    """Every book, with formats resolved to absolute paths under `root`.
+
+    `root` defaults to `library_path()` and is what every format path hangs off.
+    Pass it only when reading a catalogue that is NOT the configured library — a
+    Calibre export, or the staged copy omni-rag ingests on HPC scratch — where
+    `library_path()` would point every format at a tree the db knows nothing
+    about. `db` alone is not enough for that: it selects the catalogue, not the
+    files.
+    """
+    return _query(db, root or library_path())
+
+
+def get_book(book_id: int, db: Path | None = None, *, root: Path | None = None) -> Book | None:
+    """One book by id. Queried directly rather than filtering `load_books`.
+
+    The scan was O(library) per call, which is invisible for a one-off lookup and
+    is not for `paths.resolve_path` — the plugin resolves every document open in
+    Skim, and omni-rag's ingest resolves every file in the corpus.
+    """
+    return next(iter(_query(db, root or library_path(), book_id)), None)
 
 
 def books_by_tag(tag: str, db: Path | None = None) -> list[Book]:

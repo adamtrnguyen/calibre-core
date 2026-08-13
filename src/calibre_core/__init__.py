@@ -59,6 +59,7 @@ from calibre_core.library import (
 )
 from calibre_core.normalize import CJK, author_surname, dedup_key, norm
 from calibre_core.orphans import missing_formats, orphan_dirs, path_case_drift
+from calibre_core.paths import book_id_from_dir, library_root_for, resolve_path
 from calibre_core.records import Book, books_by_tag, get_book, iter_tags, load_books
 from calibre_core.search import score, search, token_set_ratio
 from calibre_core.writes import (
@@ -86,6 +87,9 @@ __all__ = [  # noqa: RUF022
     "CJK", "norm", "dedup_key", "author_surname",
     # records
     "Book", "load_books", "get_book", "books_by_tag", "iter_tags",
+    # layout -- the "(id)" folder is the only path -> record mapping there is,
+    # and it was reimplemented in three consumers before living here.
+    "resolve_path", "book_id_from_dir", "library_root_for",
     # search
     "search", "score", "token_set_ratio",
     # duplicates -- `excused`/`excused_within` are public because they were not,

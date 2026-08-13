@@ -13,13 +13,12 @@ reports them as orphans and, worse, hydrates discarded books from OneDrive.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from calibre_core.library import connect, library_path
+from calibre_core.paths import book_id_from_dir
 
 BOOK_SUFFIXES = (".pdf", ".epub", ".djvu", ".mobi", ".azw3", ".cbz", ".cbr", ".txt")
-_ID_SUFFIX = re.compile(r"\((\d+)\)$")
 EXCLUDED_DIRS = {".caltrash", ".calnotes"}
 
 
@@ -41,13 +40,11 @@ def orphan_dirs(db: Path | None = None) -> list[dict]:
     for d in sorted(lib.glob("*/*")):
         if not d.is_dir() or set(d.parts) & EXCLUDED_DIRS:
             continue
-        m = _ID_SUFFIX.search(d.name)
-        if not m or int(m.group(1)) in have:
+        bid = book_id_from_dir(d.name)
+        if bid is None or bid in have:
             continue
         files = [f.name for f in d.iterdir() if f.suffix.lower() in BOOK_SUFFIXES]
-        out.append(
-            {"id": int(m.group(1)), "path": str(d.relative_to(lib)), "files": files}
-        )
+        out.append({"id": bid, "path": str(d.relative_to(lib)), "files": files})
     return out
 
 
