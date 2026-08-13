@@ -33,19 +33,19 @@ test:
 test-pdf:
     uv run --extra pdf pytest
 
-# supply-chain: lockfile consistent with pyproject + CVE scan of the locked
-# runtime deps. Separate from `qa` so an upstream CVE can't block the gate.
+# Lockfile consistency only. CVE scanning was removed 2026-08-13: this is personal
+# tooling over PDFs Adam sources himself, not a service taking untrusted input, so the
+# threat model does not justify the noise. `uv lock --check` stays — it catches a
+# pyproject/uv.lock drift, which IS a real and frequent failure here (bumping the
+# calibre-core tag without re-locking).
 #
-# Two deviations from omni-rag's version of this recipe, both deliberate:
-#   `trap … EXIT` instead of a trailing `; rm -f` -- the trailing form makes `rm`
-#     the last command, so the recipe exits 0 even when pip-audit reports a CVE.
-#   `--no-deps --disable-pip` -- `uv export` already emits the FULL transitive
-#     closure pinned to exact versions, so pip's resolver has nothing to add. It
-#     also has to go: pip-audit resolves in a throwaway venv whose `ensurepip`
-#     dies with SIGABRT on this machine, which is what made the scan unrunnable.
+# For the record, the last honest run found: torch 2.11.0 PYSEC-2025-194 (fix 2.13.0)
+# and setuptools 81.0.0 PYSEC-2026-3447 (fix 83.0.0). Neither acted on. If this is ever
+# reinstated, note that pip-audit needs --no-deps --disable-pip (its throwaway resolver
+# venv SIGABRTs in ensurepip on this machine) and that git-URL requirements must be
+# stripped, or it exits 1 on "URL requirements cannot be pinned".
 audit:
     uv lock --check
-    req=$(mktemp); trap 'rm -f "$req"' EXIT; uv export --frozen --no-emit-project --no-dev --no-hashes --format requirements-txt 2>/dev/null | grep -viE '^-e |file://' > "$req"; uvx pip-audit -r "$req" --no-deps --disable-pip
 
 # pre-commit is not a dev dependency anywhere in the suite, so it is run through
 # uvx rather than `uv run` (which fails with "Failed to spawn: pre-commit").
