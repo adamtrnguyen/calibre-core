@@ -75,7 +75,7 @@ from calibre_core.writes import (
     set_book_metadata,
 )
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 # `audit` and `openlibrary` are deliberately NOT re-exported here, and are
 # reached as `from calibre_core.audit import ...`. They are report TOOLS with
