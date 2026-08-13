@@ -74,7 +74,7 @@ from calibre_core.writes import (
     set_book_metadata,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 # Grouped by concern rather than sorted: the grouping is the documentation of
 # what this package is for. RUF022 wants alphabetical, which would scatter it.
