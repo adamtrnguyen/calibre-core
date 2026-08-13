@@ -54,6 +54,25 @@ CREATE TABLE books_tags_link (
     UNIQUE(book, tag)
 );
 
+-- Transcribed from the real metadata.db. There is deliberately no
+-- `books.publisher` column above, because the real schema has none: the
+-- publisher is reachable only through this pair. `UNIQUE(book)` is load-bearing
+-- documentation -- a book has at most ONE publisher, unlike tags or authors.
+CREATE TABLE publishers (
+    id   INTEGER PRIMARY KEY,
+    name TEXT NOT NULL COLLATE NOCASE,
+    sort TEXT COLLATE NOCASE,
+    link TEXT NOT NULL DEFAULT '',
+    UNIQUE(name)
+);
+
+CREATE TABLE books_publishers_link (
+    id        INTEGER PRIMARY KEY,
+    book      INTEGER NOT NULL,
+    publisher INTEGER NOT NULL,
+    UNIQUE(book)
+);
+
 CREATE TABLE data (
     id                INTEGER PRIMARY KEY,
     book              INTEGER NOT NULL,

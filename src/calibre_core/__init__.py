@@ -17,6 +17,8 @@ layout, search caches, link tables) that direct SQL desynchronises.
 
 from calibre_core.duplicates import (
     dupok_pairs,
+    excused,
+    excused_within,
     isbn_groups,
     sha256,
     size_groups,
@@ -45,7 +47,7 @@ from calibre_core.orphans import missing_formats, orphan_dirs, path_case_drift
 from calibre_core.records import Book, books_by_tag, get_book, iter_tags, load_books
 from calibre_core.search import score, search, token_set_ratio
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 # Grouped by concern rather than sorted: the grouping is the documentation of
 # what this package is for. RUF022 wants alphabetical, which would scatter it.
@@ -60,8 +62,10 @@ __all__ = [  # noqa: RUF022
     "Book", "load_books", "get_book", "books_by_tag", "iter_tags",
     # search
     "search", "score", "token_set_ratio",
-    # duplicates
+    # duplicates -- `excused`/`excused_within` are public because they were not,
+    # and two consumers reimplemented the pairwise check rather than import it.
     "title_groups", "size_groups", "isbn_groups", "dupok_pairs", "sha256",
+    "excused", "excused_within",
     # integrity
     "orphan_dirs", "missing_formats", "path_case_drift",
     # isbn -- to_isbn13 is what matches an ISBN-10 record against an ISBN-13 one,

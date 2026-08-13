@@ -14,6 +14,11 @@ from pathlib import Path
 
 from calibre_core.library import connect, library_path
 
+# There is NO `books.publisher` column -- checked against the real Calibre 9.x
+# schema, which is `publishers(id, name, sort, link)` plus
+# `books_publishers_link(id, book, publisher)`. That link table carries
+# `UNIQUE(book)`, so a book has AT MOST ONE publisher and a scalar subquery is
+# exactly right; GROUP_CONCAT here would imply a fan-out that cannot happen.
 _BOOKS_SQL = """
 SELECT b.id, b.title, b.path, b.uuid, b.timestamp, b.pubdate, b.last_modified,
        (SELECT GROUP_CONCAT(a.name, ' & ')
@@ -22,7 +27,10 @@ SELECT b.id, b.title, b.path, b.uuid, b.timestamp, b.pubdate, b.last_modified,
        (SELECT GROUP_CONCAT(t.name, ',')
           FROM books_tags_link tl JOIN tags t ON t.id = tl.tag
          WHERE tl.book = b.id),
-       (SELECT val FROM identifiers WHERE book = b.id AND type = 'isbn' LIMIT 1)
+       (SELECT val FROM identifiers WHERE book = b.id AND type = 'isbn' LIMIT 1),
+       (SELECT p.name
+          FROM books_publishers_link pl JOIN publishers p ON p.id = pl.publisher
+         WHERE pl.book = b.id)
 FROM books b
 """
 
@@ -41,6 +49,11 @@ class Book:
     timestamp: str | None = None
     pubdate: str | None = None
     last_modified: str | None = None
+    # Appended rather than filed next to `isbn` where it belongs bibliographically,
+    # because every field here is positional as well as keyword: inserting mid-list
+    # would silently shift `path`/`uuid`/`timestamp` for any caller that builds a
+    # Book positionally, and a wrong-but-plausible uuid breaks deep links quietly.
+    publisher: str | None = None
     _extra: dict = field(default_factory=dict, repr=False, compare=False)
 
     @property
@@ -85,7 +98,7 @@ def load_books(db: Path | None = None) -> list[Book]:
         con.close()
 
     out: list[Book] = []
-    for (bid, title, path, uuid, ts, pub, lastmod, authors, tags, isbn) in rows:
+    for (bid, title, path, uuid, ts, pub, lastmod, authors, tags, isbn, publisher) in rows:
         pairs = fmts.get(bid, [])
         out.append(
             Book(
@@ -101,6 +114,7 @@ def load_books(db: Path | None = None) -> list[Book]:
                 timestamp=ts,
                 pubdate=pub,
                 last_modified=lastmod,
+                publisher=publisher,
             )
         )
     return out

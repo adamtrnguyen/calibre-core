@@ -43,6 +43,7 @@ class LibraryBuilder:
         con.close()
         self._next_author = 1
         self._next_tag = 1
+        self._next_publisher = 1
 
     def add(
         self,
@@ -53,6 +54,7 @@ class LibraryBuilder:
         fmt: str = "PDF",
         content: bytes = b"%PDF-1.4\nfixture\n",
         isbn: str | None = None,
+        publisher: str | None = None,
         on_disk: bool = True,
         path: str | None = None,
     ) -> Path:
@@ -97,6 +99,28 @@ class LibraryBuilder:
         if isbn:
             con.execute(
                 "INSERT INTO identifiers (book, type, val) VALUES (?,'isbn',?)", (book_id, isbn)
+            )
+        if publisher:
+            # Interned in `publishers` and joined through the link table, exactly
+            # as Calibre stores it — NOT a column on `books`, which has none. A
+            # fixture that faked a `books.publisher` column would let a query
+            # against a column that does not exist pass here and fail on the real
+            # library.
+            row = con.execute(
+                "SELECT id FROM publishers WHERE name = ?", (publisher,)
+            ).fetchone()
+            if row:
+                pid = row[0]
+            else:
+                pid = self._next_publisher
+                self._next_publisher += 1
+                con.execute(
+                    "INSERT INTO publishers (id, name, sort) VALUES (?,?,?)",
+                    (pid, publisher, publisher),
+                )
+            con.execute(
+                "INSERT OR IGNORE INTO books_publishers_link (book, publisher) VALUES (?,?)",
+                (book_id, pid),
             )
 
         fname = f"{safe_title[:40]} - {first_author}"

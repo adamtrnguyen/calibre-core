@@ -1,18 +1,34 @@
-"""Old (calibre_mcp.matching) vs new (calibre_core), read-only, real library."""
+"""Old vs new, read-only, against the real library.
+
+"Old" is `scripts/golden/pre_extraction_matching.py` -- a frozen copy of
+calibre-mcp's `matching.py` from BEFORE the extraction (commit 950dfde1). It used
+to be imported live from the calibre-mcp working tree, but that module is now a
+dict adapter over calibre_core, so the baseline had quietly become the thing under
+test: every check would compare calibre_core against itself and report
+"identical". See the frozen file's header.
+
+Run from the package root: `uv run python scripts/golden_differential.py`
+"""
 import os
+import re
 import sys
+from pathlib import Path
 
 os.environ["CALIBRE_LIBRARY"] = "/Users/adam/Calibre Library"
-sys.path.insert(0, "/Users/adam/Research/MCPSuite/calibre-mcp/src")
-sys.path.insert(0, "src")
+_HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE / "golden"))
+sys.path.insert(0, str(_HERE.parent / "src"))
 
-from calibre_mcp import matching as old
+import pre_extraction_matching as old
 
+from calibre_core import __version__
 from calibre_core import duplicates as newdup
+from calibre_core.normalize import author_surname
 from calibre_core.orphans import orphan_dirs as new_orphans
 from calibre_core.records import load_books as new_load
 from calibre_core.search import search as new_search
 
+print(f"calibre_core {__version__} vs frozen pre-extraction baseline (950dfde1)\n")
 fail = 0
 
 # 1. load_books -> identical (id, title, authors) triples
@@ -58,7 +74,6 @@ lost, gained = og - ng, ng - og
 print(f"\ndup groups: old={len(og)} new={len(ng)} lost={len(lost)} gained={len(gained)}")
 titles = {b.id: b.title for b in books}
 CJK = "぀-ヿ㐀-䶿一-鿿가-힯"
-import re
 
 
 def has_cjk(s): return bool(re.search(f"[{CJK}]", s))
@@ -75,5 +90,28 @@ oo = sorted((d["id"], d["path"]) for d in old.find_orphans())
 no = sorted((d["id"], d["path"]) for d in new_orphans())
 print(f"\norphans: old={len(oo)} new={len(no)} identical={oo == no}")
 if oo != no: fail += 1
+
+# 5. author_surname -> report every real author the 0.2.0 fixes moved.
+#    NOT a pass/fail check: the fixes are deliberate behaviour changes. It exists
+#    so a change to the surname logic cannot alter the discriminator for a real
+#    author without that showing up here by name.
+EXPECTED_SURNAME_FIXES = {
+    "Daniel J. O'Keefe": "okeefe",
+    "David R. O'Hallaron": "ohallaron",
+    "Joseph D'Amelio": "damelio",
+    "Marie O'Mahony": "omahony",
+    # Not a personal name (a magazine, filed as an author). Listed because the
+    # apostrophe fix touches it and 'how' is what it keyed to before as well.
+    "Hair's How": "how",
+    "Syvert P. Nørsett": "norsett",
+    "Paweł Łupkowski": "lupkowski",
+}
+print("\nauthor_surname: records the 0.2.0 apostrophe + stroke-letter fixes touch")
+for name, want in sorted(EXPECTED_SURNAME_FIXES.items()):
+    got = author_surname(name)
+    flag = "ok " if got == want else "DIFF"
+    print(f"  {flag} {name!r:26} -> {got!r} (expected {want!r})")
+    if got != want:
+        fail += 1
 
 print(f"\n=== differential failures: {fail} ===")

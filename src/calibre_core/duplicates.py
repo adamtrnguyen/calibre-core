@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 from collections import defaultdict
+from collections.abc import Iterable
 from pathlib import Path
 
 from calibre_core.isbn import clean_isbn
@@ -71,9 +72,49 @@ def dupok_pairs(db: Path | None = None) -> dict[int, set[int]]:
     return dict(out)
 
 
-def _excused(a: int, b: int, pairs: dict[int, set[int]]) -> bool:
-    """Symmetric, and fails OPEN: one side naming the other is enough."""
+def excused(a: int, b: int, pairs: dict[int, set[int]]) -> bool:
+    """Is this specific PAIR excused? Symmetric, and fails OPEN.
+
+    One side naming the other is enough. Requiring both would mean a human edits
+    two records to silence one pair, and the pair keeps being reported until they
+    do -- which is how the output stops being read.
+
+    Public because it was private for one release and two consumers wrote their
+    own instead (`calibre_mcp.writes._excused_within`, and omni-rag's audit
+    `_all_excused`). A pairwise predicate is not an implementation detail when
+    every caller that reports duplicates needs it.
+    """
     return b in pairs.get(a, set()) or a in pairs.get(b, set())
+
+
+# The name this shipped under in 0.1.0. Kept so existing importers do not break.
+_excused = excused
+
+
+def excused_within(
+    book_id: int, candidates: Iterable[int], pairs: dict[int, set[int]]
+) -> bool:
+    """Is `book_id` excused against at least one OTHER member of `candidates`?
+
+    The helper both consumers actually wanted, and the reason it is here rather
+    than in each of them: suppression must require the two records be paired with
+    EACH OTHER, not merely both appear somewhere in the `#dupok` column.
+
+    `calibre_mcp.writes` got that wrong by flattening every partner into one
+    global set and suppressing on mere membership. So if any unrelated record
+    named two books as its partners, a genuine duplicate BETWEEN those two books
+    reported `ok` -- the write gate waved through exactly the duplicate it exists
+    to catch. Nothing reported that it had.
+
+    It was then fixed locally, as `writes._excused_within`, and omni-rag's audit
+    grew its own. This function is the shared version those two copies collapse
+    into; the semantics here are the corrected ones, not the flattened ones.
+
+    `candidates` is the matched set, and `book_id` is excluded from it here rather
+    than by the caller: a record trivially "matches itself" in any set built from
+    its own signals, and self-pairing would excuse every record from everything.
+    """
+    return any(excused(book_id, other, pairs) for other in candidates if other != book_id)
 
 
 def title_groups(
@@ -99,8 +140,11 @@ def title_groups(
     for grp in buckets.values():
         if len(grp) < 2:
             continue
+        # EVERY pair, not any: a three-book group with one excused pair still has
+        # a real duplicate in it, so it must still be reported. (`excused_within`
+        # is the ANY form, for the different question a single-record check asks.)
         if respect_dupok and all(
-            _excused(x.id, y.id, pairs) for x in grp for y in grp if x.id != y.id
+            excused(x.id, y.id, pairs) for x in grp for y in grp if x.id != y.id
         ):
             continue
         groups.append(sorted(grp, key=lambda b: b.id))
@@ -134,7 +178,7 @@ def size_groups(
             continue
         ids = list(uniq)
         if respect_dupok and all(
-            _excused(x, y, pairs) for x in ids for y in ids if x != y
+            excused(x, y, pairs) for x in ids for y in ids if x != y
         ):
             continue
         groups.append([uniq[i] for i in sorted(uniq)])

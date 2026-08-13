@@ -133,6 +133,19 @@ def test_schema_probe_names_a_missing_table(library):
     assert schema_probe()["identifiers"] == ["<table absent>"]
 
 
+def test_schema_probe_covers_the_publisher_tables(library):
+    """`load_books` joins these as of 0.2.0, and a table it reads but does not
+    probe is the failure mode `REQUIRED_SCHEMA` exists to prevent: without the
+    entry, a Calibre schema lacking them turns every `load_books` call into a raw
+    `no such table` OperationalError from inside a subquery, instead of one probe
+    naming what is gone."""
+    con = sqlite3.connect(library.db)
+    con.execute("DROP TABLE books_publishers_link")
+    con.commit()
+    con.close()
+    assert schema_probe()["books_publishers_link"] == ["<table absent>"]
+
+
 def test_schema_probe_raises_rather_than_reporting_everything_missing(tmp_path, monkeypatch):
     """No database is a different failure from a wrong schema, and conflating
     them would report 7 missing tables for a path typo."""

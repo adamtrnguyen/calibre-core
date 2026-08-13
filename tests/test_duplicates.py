@@ -18,6 +18,8 @@ import sqlite3
 from calibre_core.duplicates import (
     _excused,
     dupok_pairs,
+    excused,
+    excused_within,
     isbn_groups,
     sha256,
     size_groups,
@@ -115,9 +117,64 @@ def test_excused_is_symmetric_and_fails_open(library):
     editing two records to silence one pair, and the pair would keep being
     reported until they did — which is how the output stops being read."""
     pairs = {954: {995}}
-    assert _excused(954, 995, pairs)
-    assert _excused(995, 954, pairs)
-    assert not _excused(954, 111, pairs)
+    assert excused(954, 995, pairs)
+    assert excused(995, 954, pairs)
+    assert not excused(954, 111, pairs)
+
+
+# --------------------------------------------------------------------------
+# excused / excused_within -- the public pairwise API
+# --------------------------------------------------------------------------
+
+def test_underscore_excused_still_resolves_to_the_public_name():
+    """`_excused` shipped in 0.1.0 and this package is consumed by tag. Promoting
+    it to `excused` without an alias would break importers on upgrade for no
+    reason, so the old name must stay bound to the SAME object — not a copy that
+    can drift."""
+    assert _excused is excused
+
+
+def test_excused_within_ignores_the_record_itself():
+    """A record trivially appears in any matched set built from its own signals.
+    If `excused_within` compared it against itself, a self-pairing (or any set of
+    one) would excuse it from everything — the suppression would always fire."""
+    assert not excused_within(954, [954], {954: {954}})
+
+
+def test_excused_within_requires_a_partner_that_also_matched():
+    """The defect this exists to prevent, from `calibre_mcp.writes`: it flattened
+    every `#dupok` partner into ONE global set and suppressed on mere membership.
+    Here 954 is paired with 700, which is NOT in the matched set — so the 954/995
+    duplicate is real and must not be suppressed. The flattened version saw 954 in
+    the column and returned `ok`, waving through the duplicate the write gate
+    exists to catch."""
+    pairs = {954: {700}}
+    assert not excused_within(954, [954, 995], pairs)
+    assert excused_within(954, [954, 995, 700], pairs)
+
+
+def test_excused_within_is_symmetric_like_excused():
+    """Only one side annotated, either side asking. Inherited from `excused`, and
+    asserted here because a caller uses this function, not that one."""
+    pairs = {995: {954}}
+    assert excused_within(954, [954, 995], pairs)
+    assert excused_within(995, [954, 995], pairs)
+
+
+def test_excused_within_accepts_any_iterable_not_just_a_set():
+    """Typed `Iterable[int]` because callers build the matched set by
+    comprehension over signals — a list. Consuming a generator must also work, and
+    must not be exhausted before the check completes."""
+    pairs = {954: {995}}
+    assert excused_within(954, (i for i in [995, 700]), pairs)
+    assert excused_within(954, [995], pairs)
+    assert excused_within(954, {995}, pairs)
+
+
+def test_excused_within_with_no_partners_recorded_is_not_excused():
+    """An empty `#dupok` column must suppress nothing. Failing open on the pair is
+    deliberate; failing open on absence would suppress every duplicate."""
+    assert not excused_within(954, [954, 995], {})
 
 
 # --------------------------------------------------------------------------

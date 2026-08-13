@@ -30,6 +30,12 @@ REQUIRED_SCHEMA: dict[str, tuple[str, ...]] = {
     "books_tags_link": ("book", "tag"),
     "data": ("book", "format", "name", "uncompressed_size"),
     "identifiers": ("book", "type", "val"),
+    # `load_books` reads these, so they belong here by the rule above. Note there
+    # is no `books.publisher` column -- the publisher lives ONLY in this pair of
+    # tables, which is why a consumer that wanted it could not get it from `books`
+    # and fell back to shelling out to `calibredb list --for-machine`.
+    "publishers": ("id", "name"),
+    "books_publishers_link": ("book", "publisher"),
 }
 
 

@@ -5,6 +5,8 @@ module replaced, or a real false positive the old grouping produced against
 Adam's library. Verified by a read-only differential over 1,091 books.
 """
 
+import unicodedata
+
 from calibre_core.normalize import author_surname, dedup_key, norm
 
 
@@ -37,7 +39,6 @@ def test_hangul_survives_because_nfkd_decomposes_it_into_jamo():
 
 def test_hangul_survives_from_decomposed_input():
     """macOS stores filenames NFD, so a title can arrive already decomposed."""
-    import unicodedata
 
     assert norm(unicodedata.normalize("NFD", "한국어")) == norm("한국어")
 
@@ -143,3 +144,64 @@ def test_single_character_cjk_surname_is_not_dropped():
     """The len>1 filter that removes middle initials must not eat a one-glyph
     name; the fallback to the raw token list covers it."""
     assert author_surname("李") == "李"
+
+
+def test_apostrophe_surnames_keep_their_leading_particle():
+    """Found by diffing this function against `calibre-check-wip`'s `surname` over
+    all 1388 real authors — the one case where that unshipped version was right and
+    this was wrong.
+
+    The cleanup class turned the apostrophe into a SPACE, splitting `O'Keefe` into
+    tokens 'o' and 'keefe'; 'o' is then discarded by the len>1 middle-initial
+    filter, so the surname came back as 'keefe'. Four real authors were affected.
+    An apostrophe joins one name, exactly like the hyphen already does."""
+    assert author_surname("Daniel J. O'Keefe") == "okeefe"
+    assert author_surname("David R. O'Hallaron") == "ohallaron"
+    assert author_surname("Joseph D'Amelio") == "damelio"
+    assert author_surname("Marie O'Mahony") == "omahony"
+
+
+def test_curly_apostrophe_keys_the_same_as_a_straight_one():
+    """Calibre stores whatever the metadata source pasted in, and a right single
+    quote is what most web sources emit. Two spellings of one author must not be
+    two different surnames — that is a missed duplicate, not a cosmetic issue."""
+    assert author_surname("Daniel J. O’Keefe") == author_surname("Daniel J. O'Keefe")
+
+
+def test_stroke_letters_do_not_truncate_the_surname():
+    """`ø` and `ł` carry their diacritic INSIDE the codepoint, so NFKD does not
+    decompose them and the combining-mark strip cannot reach them. They then hit
+    the punctuation class and became a space, which SPLIT the word: `Nørsett` keyed
+    to 'rsett' and `Łupkowski` to 'upkowski' — the surname's leading letter gone.
+
+    Real library authors: Syvert P. Nørsett (Hairer & Nørsett & Wanner), Paweł
+    Łupkowski. Neither implementation diffed against got this right; the E_work one
+    returned 'nrsett', which is merely less wrong."""
+    assert author_surname("Syvert P. Nørsett") == "norsett"
+    assert author_surname("Paweł Łupkowski") == "lupkowski"
+    assert author_surname("Øystein Linnebo") == "linnebo"
+
+
+def test_stroke_letters_fold_in_titles_too_so_search_reaches_them():
+    """The fix lives in `_fold_diacritics`, which is shared, so a US-keyboard query
+    now reaches these the same way it already reached Können and Hébert. Zero real
+    titles contain these characters, so this changes no duplicate grouping — it is
+    the search-reach half of the same defect."""
+    assert norm("Nørsett") == "norsett"
+    assert norm("Łódź") == "lodz"
+    assert dedup_key("Straße") == "strasse"
+
+
+def test_stroke_fold_runs_after_decomposition_not_before():
+    """`ǿ` (U+01FF) decomposes to `ø` + acute. Translating before the
+    combining-mark strip would miss it and leave a bare `ø` for the character class
+    to eat, reintroducing the truncation this fixes."""
+    assert norm("ǿrn") == "orn"
+
+
+def test_ligature_folds_expand_to_two_letters():
+    """`æ`/`œ`/`ß` are one codepoint standing for two letters, so a 1:1 map would
+    silently shorten the word. NFKD does not expand them (only NFKC_CF does), which
+    is why they need the explicit map."""
+    assert norm("Æsop") == "aesop"
+    assert norm("Œuvres") == "oeuvres"

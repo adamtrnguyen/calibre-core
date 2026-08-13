@@ -51,6 +51,26 @@ _CJK_CHAR = re.compile(rf"[{CJK}]")
 # Dropped from the tail when picking a surname, so 'Heuer Jr.' is not 'jr'.
 _SUFFIXES = frozenset({"jr", "sr", "ii", "iii", "iv", "phd", "md", "esq"})
 
+# Latin letters whose diacritic is welded into the codepoint, so NFKD does NOT
+# decompose them and the combining-mark strip below cannot reach them. They then
+# hit the `[^a-z0-9...]` class as punctuation and became a SPACE, which SPLIT the
+# word: `Nørsett` keyed to 'rsett' and `Łupkowski` to 'upkowski' -- the leading
+# letter of the surname silently gone. Mapped explicitly instead.
+_ATOMIC_FOLDS = str.maketrans({
+    "ø": "o", "Ø": "O", "ł": "l", "Ł": "L", "đ": "d", "Đ": "D",
+    "ð": "d", "Ð": "D", "þ": "th", "Þ": "Th", "ħ": "h", "Ħ": "H",
+    "ŧ": "t", "Ŧ": "T", "ı": "i", "ŋ": "n", "Ŋ": "N",
+    "æ": "ae", "Æ": "Ae", "œ": "oe", "Œ": "Oe", "ß": "ss",
+})
+
+# Apostrophes are DELETED, not space-substituted, because an apostrophe inside a
+# surname is part of ONE name -- the same argument the hyphen already won. As a
+# space it split `O'Keefe` into 'o' + 'keefe', and 'o' is then dropped as a
+# middle initial, so four real authors keyed to the wrong name entirely:
+# O'Keefe->'keefe', O'Hallaron->'hallaron', D'Amelio->'amelio', O'Mahony->'mahony'.
+# Curly and modifier-letter forms included: Calibre stores whatever was pasted in.
+_APOSTROPHE = re.compile(r"['’ʼʾ′`]")
+
 
 def _fold_diacritics(s: str) -> str:
     """Strip Latin diacritics WITHOUT touching CJK.
@@ -71,6 +91,10 @@ def _fold_diacritics(s: str) -> str:
 
     NFC first because macOS stores filenames decomposed (NFD): recomposing
     restores Hangul syllables and kana voicing before anything else runs.
+
+    `_ATOMIC_FOLDS` runs LAST, after the combining-mark strip, and the order is
+    load-bearing: `ǿ` (U+01FF) decomposes to `ø` + acute, so translating first
+    would miss it and leave a `ø` behind for the character class to eat.
     """
     out: list[str] = []
     for ch in unicodedata.normalize("NFC", s or ""):
@@ -78,7 +102,8 @@ def _fold_diacritics(s: str) -> str:
             out.append(ch)
             continue
         d = unicodedata.normalize("NFKD", ch)
-        out.append("".join(c for c in d if not unicodedata.combining(c)))
+        stripped = "".join(c for c in d if not unicodedata.combining(c))
+        out.append(stripped.translate(_ATOMIC_FOLDS))
     return "".join(out)
 
 
@@ -139,13 +164,21 @@ def author_surname(authors: str) -> str:
     Also handles 'Surname, First' (surname-first) and drops middle initials and
     generational suffixes: 'Richards J. Heuer Jr.' -> 'heuer', where taking the
     last token gave 'jr'.
+
+    An APOSTROPHE is deleted rather than turned into a space, for the same reason
+    the hyphen is kept: it joins one name. Space-substituting it split `O'Keefe`
+    into 'o' + 'keefe', and the 'o' was then discarded as a middle initial, so the
+    surname came back as 'keefe'. Four real authors were affected -- O'Keefe,
+    O'Hallaron, D'Amelio, O'Mahony. Deletion (rather than keeping the mark) is
+    what `calibre-check-wip`'s `surname` got right and this did not; it also means
+    a record punctuated `OKeefe` still keys the same.
     """
     first = (authors or "").split("&")[0].strip()
     if not first:
         return ""
     if "," in first:
         first = first.split(",", 1)[0]
-    s = _fold_diacritics(first).casefold()
+    s = _APOSTROPHE.sub("", _fold_diacritics(first)).casefold()
     # {CJK} belongs here for the same reason it belongs in norm: without it this
     # line wipes what _fold_diacritics just protected, and EVERY CJK author keys
     # to ''. That is worse than a lost name -- callers compare surnames for
