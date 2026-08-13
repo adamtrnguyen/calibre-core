@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# uv
+.venv/
+
+# tooling caches
+.pytest_cache/
+.ruff_cache/
+.ty_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# a Calibre catalogue is never test data — the fixture builds its own throwaway
+# library, and a real metadata.db would publish what its owner reads
+metadata.db
+*.db-wal
+*.db-shm
+
+# nor are books
+*.pdf
+*.epub
+*.mobi
+*.azw3
+*.djvu
+*.cbz
+*.cbr
+
+# macOS
+.DS_Store
