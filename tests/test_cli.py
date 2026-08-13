@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from pathlib import Path
 
 from calibre_core.cli import main
 from calibre_core.records import load_books
@@ -170,3 +171,143 @@ def test_human_output_needs_no_json_flag(library, capsys):
     assert code == 0
     assert "A Readable Book" in out and "PDF" in out
     assert not out.startswith("[")
+
+
+# --------------------------------------------------------------------------
+# audit / metadata-candidates -- the two tools that moved in from omni-rag
+# --------------------------------------------------------------------------
+
+def test_audit_writes_both_report_files_and_prints_where(library, capsys, tmp_path):
+    """The stdout summary carries the PATHS. A report whose location you have to
+    guess is a report you regenerate."""
+    library.add(1, "Microsoft Word - x.doc", authors="Unknown")
+    out = _json_out(capsys, ["--json", "audit", "--out-dir", str(tmp_path / "reports")])
+    assert Path(out["json"]).exists()
+    assert Path(out["markdown"]).exists()
+    assert out["books"] == 1
+    assert out["issue_counts"]["junk-title"] == 1
+
+
+def test_audit_honours_library_like_every_other_subcommand(library_at, capsys, tmp_path, guard_real_library):
+    """`--library` is threaded through `CALIBRE_LIBRARY`, so it must reach the
+    audit too -- `guard_real_library` points the env at nothing, so a subcommand
+    that ignored the flag would fail rather than quietly read the live library."""
+    other = library_at(tmp_path / "Elsewhere")
+    other.add(1, "Only Book")
+    out = _json_out(
+        capsys,
+        ["--json", "--library", str(other.root), "audit", "--out-dir", str(tmp_path / "r")],
+    )
+    assert out["books"] == 1
+
+
+def test_audit_does_not_scan_pdfs_unless_asked(library, capsys, tmp_path):
+    library.add(1, "No ISBN", fmt="PDF")
+    out = _json_out(capsys, ["--json", "audit", "--out-dir", str(tmp_path / "r")])
+    assert out["scanned_pdf_candidates"] == 0
+
+
+def test_two_audits_do_not_overwrite_each_other(library, capsys, tmp_path, monkeypatch):
+    """Timestamped filenames. Comparing today's audit to the last one is the
+    point, and a fixed name destroys exactly that."""
+    library.add(1, "A Book")
+    stamps = iter(["20260101-000000", "20260102-000000"])
+    monkeypatch.setattr(
+        "calibre_core.cli._stamped",
+        lambda d, stem: (
+            d.mkdir(parents=True, exist_ok=True) or (s := next(stamps))
+            and (d / f"{stem}-{s}.json", d / f"{stem}-{s}.md")
+        ),
+    )
+    a = _json_out(capsys, ["--json", "audit", "--out-dir", str(tmp_path / "r")])
+    b = _json_out(capsys, ["--json", "audit", "--out-dir", str(tmp_path / "r")])
+    assert a["json"] != b["json"]
+    assert len(list((tmp_path / "r").glob("*.json"))) == 2
+
+
+def test_metadata_candidates_reads_an_audit_json_and_writes_a_report(capsys, tmp_path, monkeypatch):
+    """The two commands compose through a FILE, so the expensive audit is run once
+    and enriched as often as needed."""
+    audit_json = tmp_path / "audit.json"
+    audit_json.write_text(json.dumps({
+        "safe_existing_isbn_lookup": [
+            {"id": 1, "title": "A Book", "authors": "An Author",
+             "isbn": "9780262035613", "issues": ["missing-publisher"]}
+        ]
+    }))
+
+    class Fake:
+        def __init__(self, timeout): pass
+        def edition(self, isbn):
+            return {"isbn": isbn, "title": "A Book", "authors": ["An Author"]}
+
+    monkeypatch.setattr("calibre_core.openlibrary.OpenLibraryClient", Fake)
+    out = _json_out(
+        capsys,
+        ["--json", "metadata-candidates", str(audit_json), "--out-dir", str(tmp_path / "r")],
+    )
+    assert out["input_candidates"] == 1
+    assert out["strong-candidate"] == 1
+    assert Path(out["json"]).exists() and Path(out["markdown"]).exists()
+
+
+def test_metadata_candidates_progress_goes_to_stderr_not_stdout(capsys, tmp_path, monkeypatch):
+    """`--json | jq` must not be fed counters."""
+    audit_json = tmp_path / "audit.json"
+    audit_json.write_text(json.dumps({
+        "safe_existing_isbn_lookup": [
+            {"id": 1, "title": "T", "authors": "A", "isbn": "9780262035613", "issues": []}
+        ]
+    }))
+
+    class Fake:
+        def __init__(self, timeout): pass
+        def edition(self, isbn): return {"isbn": isbn, "error": "http 404"}
+
+    monkeypatch.setattr("calibre_core.openlibrary.OpenLibraryClient", Fake)
+    code, out, err = _run(
+        capsys,
+        ["--json", "metadata-candidates", str(audit_json), "--out-dir", str(tmp_path / "r")],
+    )
+    assert code == 0
+    json.loads(out)              # stdout is parseable JSON and nothing else
+    assert "lookup 1/1" in err
+
+
+def test_every_registered_subcommand_has_a_handler():
+    """A subparser with no entry in the handler dict fails with a KeyError at
+    dispatch — AFTER argparse has accepted the command, so `--help` and argument
+    validation both pass and the break only shows up on a real invocation.
+
+    Checked by comparing the two literals in the AST. Driving each subcommand
+    through `main([name, "--help"])` does NOT test this: `--help` raises SystemExit
+    inside `parse_args`, so it returns before the handler dict is ever indexed.
+    """
+    import ast
+    import inspect
+
+    from calibre_core import cli
+
+    tree = ast.parse(inspect.getsource(cli))
+    fn = next(
+        n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "main"
+    )
+    registered = {
+        node.args[0].value
+        for node in ast.walk(fn)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "add_parser"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+    }
+    # The handler dict is the only dict literal in `main` whose keys are all strings.
+    handled = next(
+        {k.value for k in node.keys}
+        for node in ast.walk(fn)
+        if isinstance(node, ast.Dict)
+        and node.keys
+        and all(isinstance(k, ast.Constant) and isinstance(k.value, str) for k in node.keys)
+    )
+    assert registered == handled, f"registered but unhandled: {registered - handled}"
+    assert registered == {"books", "resolve", "audit", "metadata-candidates"}

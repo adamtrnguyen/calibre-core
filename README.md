@@ -30,8 +30,12 @@ that answer.
 dependencies = ["calibre-core"]
 
 [tool.uv.sources]
-calibre-core = { git = "https://github.com/adamtrnguyen/calibre-core", tag = "v0.3.0" }
+calibre-core = { git = "https://github.com/adamtrnguyen/calibre-core", tag = "v0.4.0" }
 ```
+
+`pymupdf` is an optional extra (`calibre-core[pdf]`), needed only by the two
+things that read or write PDF internals: the audit's ISBN scan and the outline
+write. Everything else runs on the base install.
 
 ## Use
 
@@ -45,13 +49,35 @@ title_groups()      # duplicate candidates: normalised title + first-author surn
 orphan_dirs()       # directories on disk with no row in metadata.db
 ```
 
-There is also a CLI, for callers that cannot import Python — an Obsidian plugin
-spawned with a bare interpreter, a shell script:
+```python
+from calibre_core import inject_outline
+
+# Write a table of contents into a library PDF: refuses while the Calibre GUI is
+# open, saves elsewhere and verifies the copy before it replaces the original,
+# keeps a backup. Returns {"ok": False, "reason": ...} per file; raises
+# WriteBlocked only for the GUI, which applies to the whole batch.
+inject_outline(path, entries, backup_dir="/tmp/toc-backups")
+```
+
+The CLI serves two populations: callers that cannot import Python (an Obsidian
+plugin spawned with a bare interpreter, a shell script), and tools you run.
 
 ```console
 $ calibre-core books --json
 $ calibre-core resolve "/path/to/Author/Title (123)/book.pdf" --json
+
+# metadata cleanup, in two composable halves — the audit is the expensive one,
+# so it writes a JSON the second step reads as often as you like
+$ calibre-core audit --out-dir reports --scan-missing-isbns
+$ calibre-core metadata-candidates reports/calibre-metadata-audit-<stamp>.json
 ```
+
+`audit` finds records with no valid ISBN, no publisher, no pubdate, a placeholder
+author or a filename where a title should be, and reports duplicate groups.
+`metadata-candidates` looks each ISBN up on Open Library and labels the match
+`strong-candidate`, `review-title-author`, or `lookup-error` — it never writes to
+Calibre. Both reports are timestamped, because comparing one to the last is the
+point.
 
 ## The two invariants
 
@@ -86,7 +112,7 @@ allowlist means a book named by anyone is excused against everyone.
 
 ## Tests
 
-191 tests, and each one names the defect it prevents. The normaliser tests are
+287 tests, and each one names the defect it prevents. The normaliser tests are
 regression locks against real failures, not synthetic cases — `test_normalize.py`
 exists because a test asserting only Chinese passed for months while Korean was
 silently broken.

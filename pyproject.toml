@@ -1,18 +1,27 @@
 [project]
 name = "calibre-core"
-version = "0.3.0"
-description = "Shared read-only access to Adam's Calibre library: one connection chokepoint, one canonical record model, one title normaliser."
+version = "0.4.0"
+description = "Shared access to Adam's Calibre library: one connection chokepoint, one canonical record model, one title normaliser, one gated write path."
 # 3.11, not 3.13: calibre-mcp floors at >=3.13 but omni-rag caps at <3.14, so the
 # core has to sit under both. Develop ON 3.11 or a 3.12+ construct will pass in
 # calibre-mcp and fail in omni-rag.
 requires-python = ">=3.11"
-# Deliberately empty, and this is load-bearing enforcement rather than taste:
-# with no dependencies, `mcp` is not installed in this venv, so a stray
-# `import mcp` cannot even resolve. The dependency direction is unbreakable.
+# Kept to the bone, and this is load-bearing enforcement rather than taste: with
+# no `mcp` here it is not installed in this venv, so a stray `import mcp` cannot
+# even resolve. The dependency direction is unbreakable.
 dependencies = [
     "isbnlib>=3.10.14",
     "rapidfuzz>=3.14.5",
 ]
+
+# `pymupdf` reads and writes PDF internals; the catalogue work needs none of it.
+# It stays an extra so the base install remains small AND so the two modules that
+# touch a PDF -- `audit`'s ISBN scan and `toc`'s outline write -- import it INSIDE
+# the function. Consequence worth knowing: without the extra those two degrade
+# (audit reports `pymupdf unavailable` per file, `toc` raises ImportError) while
+# every other module works untouched.
+[project.optional-dependencies]
+pdf = ["pymupdf>=1.24"]
 
 # The one interface that ships INSIDE the package, because its consumer cannot
 # import Python at all: Obsidian spawns calibre-page-inserter's helper with a bare
@@ -21,7 +30,11 @@ dependencies = [
 calibre-core = "calibre_core.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6", "import-linter>=2.0"]
+# pymupdf is here as well as in the `pdf` extra: the outline-write tests do a real
+# `set_toc` + verify + `os.replace` on a real file. Mocking pymupdf there would
+# assert that the code calls the functions it calls, and prove nothing about the
+# only thing that matters — that a bad save never becomes the original.
+dev = ["pytest>=8", "ruff>=0.6", "import-linter>=2.0", "pymupdf>=1.24"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

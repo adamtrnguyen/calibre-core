@@ -62,6 +62,7 @@ from calibre_core.orphans import missing_formats, orphan_dirs, path_case_drift
 from calibre_core.paths import book_id_from_dir, library_root_for, resolve_path
 from calibre_core.records import Book, books_by_tag, get_book, iter_tags, load_books
 from calibre_core.search import score, search, token_set_ratio
+from calibre_core.toc import has_outline, inject_outline, sanitize_outline
 from calibre_core.writes import (
     WriteBlocked,
     add_book,
@@ -74,7 +75,14 @@ from calibre_core.writes import (
     set_book_metadata,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
+
+# `audit` and `openlibrary` are deliberately NOT re-exported here, and are
+# reached as `from calibre_core.audit import ...`. They are report TOOLS with
+# their own CLI subcommands, not primitives other code composes, and pulling them
+# up would make every `import calibre_core` drag in `urllib.request`,
+# `concurrent.futures` and a network client. The small import surface is a
+# feature of this package, not an accident.
 
 # Grouped by concern rather than sorted: the grouping is the documentation of
 # what this package is for. RUF022 wants alphabetical, which would scatter it.
@@ -100,6 +108,10 @@ __all__ = [  # noqa: RUF022
     "WriteBlocked", "gui_is_open", "backup_db", "calibredb_path",
     "check_duplicate", "add_book", "set_book_metadata",
     "current_identifiers", "remove_identifier",
+    # table of contents -- the WRITE side only. Reading a PDF outline is a PDF
+    # operation and lives with whoever parses PDFs; writing one mutates a file
+    # Calibre owns, so it is gated here like every other write.
+    "inject_outline", "sanitize_outline", "has_outline",
     # integrity
     "orphan_dirs", "missing_formats", "path_case_drift",
     # isbn -- to_isbn13 is what matches an ISBN-10 record against an ISBN-13 one,

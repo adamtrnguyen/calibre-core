@@ -1,15 +1,23 @@
-"""The command line — for consumers that cannot import this package at all.
+"""The command line — for import-less consumers, and for tools you run.
 
-Every other consumer imports `calibre_core` (the MCP server, `calfuzz`, omni-rag's
-scripts). calibre-page-inserter cannot: it is an Obsidian plugin, Obsidian spawns
-its helper with a bare `python3` interpreter with no venv, and installing
-calibre-core into the system interpreter is not a thing to do. A subprocess has
-exactly one way to reach a library — a command — so this is that command.
+Two different populations use this, and both matter:
 
-It holds NO Calibre logic, which is the same rule every other interface follows:
-argparse in, a public calibre_core call, `json.dumps` out. If a subcommand ever
-needs to decide something about a library, that decision belongs in a module
-next door and this file calls it.
+  * Consumers that CANNOT import the package. calibre-page-inserter is an
+    Obsidian plugin, Obsidian spawns its helper with a bare `python3` and no
+    venv, and installing calibre-core into the system interpreter is not a thing
+    to do. A subprocess has exactly one way to reach a library — a command.
+  * Tools a person runs. `audit` and `metadata-candidates` arrived here from
+    omni-rag's `scripts/`, where they were loose files you had to remember the
+    path of. A thing you run is a command; that is the whole reason they moved.
+
+`toc.inject_outline` is deliberately NOT here. It is called by a batch job that
+imports this package, so a subcommand would be surface with no consumer — add
+one when something that cannot import shows up needing it.
+
+This file holds NO Calibre logic, which is the same rule every other interface
+follows: argparse in, a public calibre_core call, `json.dumps` out. If a
+subcommand ever needs to decide something about a library, that decision belongs
+in a module next door and this file calls it.
 
 Conventions follow `calfuzz` (calibre-mcp's CLI): `--json` for machine-readable
 output on stdout, a human-readable table otherwise, and failures as a message on
@@ -19,11 +27,13 @@ stderr with a non-zero exit — 2 for "no library there", 1 for anything else.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import sys
 from pathlib import Path
 
+from calibre_core import audit, openlibrary
 from calibre_core.library import LibraryNotFound, SchemaError, library_path
 from calibre_core.paths import resolve_path
 from calibre_core.records import Book, load_books
@@ -87,6 +97,59 @@ def cmd_resolve(args: argparse.Namespace, as_json: bool) -> int:
     return 0
 
 
+def _stamped(out_dir: Path, stem: str) -> tuple[Path, Path]:
+    """`(json, markdown)` paths under a timestamped name.
+
+    Reports are never overwritten: the value of an audit is comparing it to the
+    last one, and a fixed filename destroys the thing you wanted.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = dt.datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
+    return out_dir / f"{stem}-{stamp}.json", out_dir / f"{stem}-{stamp}.md"
+
+
+def cmd_audit(args: argparse.Namespace, as_json: bool) -> int:
+    report = audit.audit(
+        library_path(),
+        scan_missing=args.scan_missing_isbns,
+        pages_each_end=args.pages_each_end,
+        scan_timeout=args.scan_timeout,
+        limit_scan=args.limit_scan,
+        progress_every=args.progress_every,
+        scan_workers=args.scan_workers,
+    )
+    json_path, md_path = _stamped(args.out_dir, "calibre-metadata-audit")
+    json_path.write_text(json.dumps(report, indent=2, ensure_ascii=False))
+    audit.write_markdown(report, md_path)
+    # The summary goes to stdout either way -- `--json` controls the SHAPE, and a
+    # report you cannot see the result of is a report you rerun.
+    result = {"json": str(json_path), "markdown": str(md_path), **report["summary"]}
+    if as_json:
+        print(json.dumps(result, ensure_ascii=False))
+    else:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_metadata_candidates(args: argparse.Namespace, as_json: bool) -> int:
+    report = openlibrary.build(
+        json.loads(args.audit_json.read_text()),
+        timeout=args.timeout,
+        workers=args.workers,
+        limit=args.limit,
+        include_multi=args.include_multi,
+        # Progress to stderr, not stdout: stdout carries the result, and a caller
+        # doing `... --json | jq` must not be fed counters.
+        on_progress=lambda i, n: print(f"lookup {i}/{n}", file=sys.stderr, flush=True),
+    )
+    json_path, md_path = _stamped(args.out_dir, "calibre-openlibrary-candidates")
+    json_path.write_text(json.dumps(report, indent=2, ensure_ascii=False))
+    openlibrary.write_markdown(report, md_path)
+    result = {"json": str(json_path), "markdown": str(md_path), **report["summary"]}
+    print(json.dumps(result, ensure_ascii=False) if as_json else json.dumps(result, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     # `--library` and `--json` are attached to BOTH the top level and every
     # subparser so either order works. They must default to SUPPRESS to do that:
@@ -116,6 +179,39 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_resolve.add_argument("path", nargs="+")
 
+    p_audit = sub.add_parser(
+        "audit", parents=[common], help="metadata-cleanup candidates: thin records + duplicate groups"
+    )
+    p_audit.add_argument("--out-dir", type=Path, default=Path("reports"))
+    p_audit.add_argument(
+        "--scan-missing-isbns",
+        action="store_true",
+        help="also scan PDF front/back matter for printed ISBNs (needs the 'pdf' extra)",
+    )
+    p_audit.add_argument("--pages-each-end", type=int, default=8)
+    p_audit.add_argument(
+        "--scan-timeout", type=int, default=20, help="seconds before one PDF scan is killed"
+    )
+    p_audit.add_argument("--limit-scan", type=int, default=0, help="scan only the first N eligible PDFs")
+    p_audit.add_argument("--progress-every", type=int, default=25, help="0 to silence scan progress")
+    p_audit.add_argument("--scan-workers", type=int, default=4, help="parallel PDF scan subprocesses")
+
+    p_cand = sub.add_parser(
+        "metadata-candidates",
+        parents=[common],
+        help="look an audit's ISBNs up on Open Library and score the match",
+    )
+    p_cand.add_argument("audit_json", type=Path, help="the JSON written by `calibre-core audit`")
+    p_cand.add_argument("--out-dir", type=Path, default=Path("reports"))
+    p_cand.add_argument("--timeout", type=int, default=12)
+    p_cand.add_argument("--workers", type=int, default=4)
+    p_cand.add_argument("--limit", type=int, default=0)
+    p_cand.add_argument(
+        "--include-multi",
+        action="store_true",
+        help="also take the FIRST ISBN from pages listing several (a guess — labelled as one)",
+    )
+
     args = ap.parse_args(argv)
     as_json = getattr(args, "json", False)
     library = getattr(args, "library", None)
@@ -125,7 +221,12 @@ def main(argv: list[str] | None = None) -> int:
         # AND the root that format paths hang off in one move.
         os.environ["CALIBRE_LIBRARY"] = str(Path(library).expanduser())
 
-    handler = {"books": cmd_books, "resolve": cmd_resolve}[args.command]
+    handler = {
+        "books": cmd_books,
+        "resolve": cmd_resolve,
+        "audit": cmd_audit,
+        "metadata-candidates": cmd_metadata_candidates,
+    }[args.command]
     try:
         return handler(args, as_json)
     except BrokenPipeError:
