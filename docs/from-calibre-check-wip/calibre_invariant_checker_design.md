@@ -23,8 +23,8 @@ Nothing is implemented. Code blocks are illustrative signatures.
 
 ## 0. What I verified, and the two real defects
 
-All figures below were **observed** this session, read-only, against
-`/Users/adam/Calibre Library`. Where I independently reproduced the adversarial agent's
+All figures below were **observed** this session, read-only, against the live
+`~/Calibre Library`. Where I independently reproduced the adversarial agent's
 numbers I say so; where we differ I give both.
 
 ### 0.1 The library is almost clean
@@ -179,10 +179,10 @@ spec's general rule. **Effectively zero unexplained title duplicates** — plus 
 size-duplicate from §0.1 that titles miss.
 
 One caution discovered while testing the fix: adding spelled-out ordinals to the strip
-list to catch `Fifth Edition` also stripped `First`/`Second` from
-*The First Tutorial about Boobs* / *The Second Tutorial about Boobs*, creating a fresh
-false positive. **Strip a spelled-out ordinal only when immediately followed by
-`edition`.** That is a regression test, not a footnote.
+list to catch `Fifth Edition` also stripped `First`/`Second` from a real two-volume pair
+titled *The First Tutorial …* / *The Second Tutorial …*, creating a fresh false positive.
+**Strip a spelled-out ordinal only when immediately followed by `edition`.** That is a
+regression test, not a footnote.
 
 ### 0.6 Tags: 165 singletons is where the junk is
 
@@ -338,7 +338,7 @@ Four properties that are regression tests, not prose:
 
 1. `title_key` **keeps subtitles** (measured: 11 groups/32 records → 4 groups/8).
 2. Spelled-out ordinals strip **only before `edition`** (measured false positive:
-   *The First/Second Tutorial about Boobs*).
+   *The First/Second Tutorial …*).
 3. Every function **preserves `CJK_RANGES`** — the live bug in
    `calibre_metadata_audit.py:112` is a test case with a real Chinese title as input.
 4. `title_key('')` and empty results are **reported, never bucketed** — the `if not k`
@@ -656,7 +656,7 @@ calinv preflight /tmp/Book.pdf --title "…" --authors "…" --tags "a,b"
 | Gate | Method | Status on failure |
 |---|---|---|
 | Real PDF/EPUB | magic bytes; `pdfinfo` succeeds; EPUB `zipfile.testzip()` | `FAIL` |
-| Not a stub / error body | `st_size >= STUB_MAX_BYTES` | `FAIL` — a 114-byte "PDF" is Anna's concurrent-download error |
+| Not a stub / error body | `st_size >= STUB_MAX_BYTES` | `FAIL` — a 114-byte "PDF" is an HTTP error body, not a book |
 | Text layer present | `pdftotext` at 4 offsets, `chars/100pp >= 500` | `FAIL` (queue for OCR) |
 | Text layer **covers the book** | **per-offset** density, each reported separately | `FAIL` — one near-zero offset beside three healthy ones is the partial-coverage signature |
 | Resolution usable | `pdfimages -list` sampled ppi vs `PPI_MARGINAL` | `WARN` — purpose-relative, §13 |
@@ -752,7 +752,7 @@ Three changes to the spec's detector, each measured:
    3 *Introduction to Logic* textbook+manuals).
 2. **Handle spelled-out edition words** (`Fifth Edition`) — but **only when the ordinal is
    immediately followed by `edition`**, or you create a fresh false positive on
-   *The First / Second Tutorial about Boobs*.
+   *The First / Second Tutorial …*.
 3. **Add exact-file-size grouping.** One group library-wide, and it is the real duplicate
    title matching cannot see: 954 + 995, both Sidney F. Ray, both 49,737,184 bytes.
 

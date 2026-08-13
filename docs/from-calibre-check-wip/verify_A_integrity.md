@@ -1,4 +1,4 @@
-# Class A (Integrity) verification — Adam's Calibre library
+# Class A (Integrity) verification — a live Calibre library
 
 > **ARCHIVED — relocated 2026-08-12 from `~/Research/infra/calibre-check-wip/reports/`
 > (deleted; was never under version control).** A point-in-time READ-ONLY verification run,
@@ -7,7 +7,7 @@
 > snapshot: 1,094 books / max id 1174 then, **1,122 / 1206** at archive time. Re-run against
 > the shipped package rather than trusting the PASS/FAIL table below.
 
-**Date:** 2026-08-12 · **Library:** `/Users/adam/Calibre Library` · **Mode:** READ-ONLY
+**Date:** 2026-08-12 · **Library:** `~/Calibre Library` · **Mode:** READ-ONLY
 **Scope:** A1–A5 of `calibre_target_state.md`. Classes B/C/D/E not checked.
 **Books:** 1,094 rows · max id 1,174 · 1,116 format rows · 35.0 GB logical
 
@@ -29,17 +29,17 @@ false positives** to discard, documented below.
 
 ## Environment finding that shaped the method (read this first)
 
-`/Users/adam/Calibre Library` is a **symlink** into OneDrive:
+`~/Calibre Library` is a **symlink** into OneDrive:
 
 ```
-lrwxr-xr-x  /Users/adam/Calibre Library -> /Users/adam/Library/CloudStorage/OneDrive-Personal/Calibre Library
+lrwxr-xr-x  ~/Calibre Library -> ~/Library/CloudStorage/OneDrive-Personal/Calibre Library
 ```
 
 **989 of 1,116 format files are dataless OneDrive placeholders** (`st_blocks == 0`
 while `st_size` reports the true size). Opening one forces a full download.
 
 ```bash
-find -L "/Users/adam/Calibre Library" -maxdepth 3 -name '*.pdf' | head -3 \
+find -L "$HOME/Calibre Library" -maxdepth 3 -name '*.pdf' | head -3 \
   | while read -r f; do stat -f "blocks=%b size=%z %N" "$f"; done
 # blocks=0 size=101170480 .../Artists' Master Series_ Color and Light (93)/....pdf
 ```
@@ -111,7 +111,7 @@ directory on disk (`ls | grep -i montague` → `JOHN MONTAGUE`); the lowercase f
 is not a second directory, it is APFS resolving the same inode case-insensitively:
 
 ```bash
-ls -d "/Users/adam/Calibre Library/JOHN MONTAGUE" "/Users/adam/Calibre Library/John Montague"
+ls -d "$HOME/Calibre Library/JOHN MONTAGUE" "$HOME/Calibre Library/John Montague"
 # both resolve — case-insensitive volume, one real directory named JOHN MONTAGUE
 ```
 
@@ -172,7 +172,7 @@ write and needs the standard pre-flight.**
 - Pre-flight per spec §2: `pgrep -x calibre` empty, `metadata.db` backed up.
 - Verify by re-running the A2 walk below and confirming `orphans=0`.
 - No human decision needed on the target value — the author record is unambiguous.
-- Zotero note: `/Users/adam/Calibre Library/CLAUDE.md` line 142 warns that Zotero
+- Zotero note: `~/Calibre Library/CLAUDE.md` line 142 warns that Zotero
   linked-file attachments break when Calibre reorganizes directories. For a
   **case-only** rename on APFS the stored path string still resolves either way, so
   this specific fix should not break the link — but re-check book 66's Zotero
@@ -284,7 +284,7 @@ returned 1093 exact / 1 case-only / 0 drift.
 | 267,209 | 239 | PDF | `New Paradigms in the Psychology of Reasoning (239)` |
 | 289,655 | 137 | PDF | `The Art of Controversy (137)` |
 
-The smallest PDF is **105 KB — 926× the ~114-byte Anna's 429 error body** A5 exists
+The smallest PDF is **105 KB — 926× the ~114-byte HTTP 429 error body** A5 exists
 to catch. Nothing sits near the threshold, so the size test is not a close call.
 
 ### PDF magic-byte test — partial, and I am reporting it as partial
@@ -341,7 +341,7 @@ re-register the format so Calibre refreshes the size; not an A-class action.
 
 ## Second out-of-scope note
 
-`/Users/adam/Calibre Library/CLAUDE.md` is **stale**. It states "**94 books** as of
+`~/Calibre Library/CLAUDE.md` is **stale**. It states "**94 books** as of
 Feb 2026" (actual: 1,094) and documents Title-Case tag categories (`Mathematics`,
 `Color Theory`, `Figure Drawing`) rather than the lowercase-hyphen convention the
 target spec and the `calibre` skill require. Relevant to Class C; flagging it
@@ -362,7 +362,7 @@ All read-only. DB always opened `mode=ro`.
 | `a4_calibre.py` | Authoritative A4 using Calibre's own slug algorithm. Writes `a4_calibre.json`. |
 
 ```bash
-SP=/private/tmp/claude-501/-Users-adam/ffd1d80a-f954-4ed1-8de2-812895ac579b/scratchpad
+SP=<session scratchpad>          # where check_A.py / a4_calibre.py were written
 
 # A1 / A2 / A3 / A5  (~20 s; does NOT hydrate placeholders)
 python3 $SP/check_A.py
@@ -383,28 +383,30 @@ python3 $SP/check_A.py
 ### One-liners used
 
 ```bash
+LIB="$HOME/Calibre Library"       # or "$CALIBRE_LIBRARY"
+
 # confirm the id-66 case mismatch
-ls "/Users/adam/Calibre Library" | grep -i montague          # -> JOHN MONTAGUE
-sqlite3 "file:/Users/adam/Calibre Library/metadata.db?mode=ro" \
+ls "$LIB" | grep -i montague          # -> JOHN MONTAGUE
+sqlite3 "file:$LIB/metadata.db?mode=ro" \
   "SELECT id,title,author_sort,path FROM books WHERE id=66;"
-sqlite3 "file:/Users/adam/Calibre Library/metadata.db?mode=ro" \
+sqlite3 "file:$LIB/metadata.db?mode=ro" \
   "SELECT a.id,a.name,a.sort FROM authors a
    JOIN books_authors_link l ON l.author=a.id WHERE l.book=66;"
 
 # A3, independent of the Python script
-sqlite3 "file:/Users/adam/Calibre Library/metadata.db?mode=ro" \
+sqlite3 "file:$LIB/metadata.db?mode=ro" \
   "SELECT b.path||'/'||d.name||'.'||lower(d.format) AS f, COUNT(DISTINCT d.book) c,
           GROUP_CONCAT(DISTINCT d.book) ids
    FROM data d JOIN books b ON b.id=d.book GROUP BY f HAVING c>1;"
-sqlite3 "file:/Users/adam/Calibre Library/metadata.db?mode=ro" \
+sqlite3 "file:$LIB/metadata.db?mode=ro" \
   "SELECT path, COUNT(*) c FROM books GROUP BY path HAVING c>1;"
 
 # placeholder detection (why magic-byte coverage is partial)
-find -L "/Users/adam/Calibre Library" -maxdepth 3 -name '*.pdf' | head -3 \
+find -L "$LIB" -maxdepth 3 -name '*.pdf' | head -3 \
   | while read -r f; do stat -f "blocks=%b size=%z %N" "$f"; done
 
 # truncation check on the worst size shortfalls (hydrates those files)
-pdfinfo "/Users/adam/Calibre Library/Gabriel Peyre/Computational Optimal Transport (489)/Computational Optimal Transport - Gabriel Peyre.pdf"
+pdfinfo "$LIB/Gabriel Peyre/Computational Optimal Transport (489)/Computational Optimal Transport - Gabriel Peyre.pdf"
 ```
 
 ### Nothing was written to the library

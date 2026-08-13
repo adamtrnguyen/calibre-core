@@ -1,9 +1,9 @@
 # Salvage from `calibre-check-wip`
 
-These six documents are everything preserved from `~/Research/infra/calibre-check-wip/`,
-the design workspace that produced `calibre-core`. The workspace was **71 files /
-1,789,139 B**, was **never under version control**, and was deleted on **2026-08-12**
-after this relocation was verified byte-identical.
+These five documents are what is kept from `calibre-check-wip`, the design workspace that
+produced `calibre-core`. The workspace was **71 files / 1,789,139 B**, was **never under
+version control**, and was deleted on **2026-08-12** after this relocation was verified
+byte-identical.
 
 Every file here carries an `ARCHIVED` header stating what in it has gone stale. Read those
 headers before acting on any content — several of these documents read as live worklists
@@ -15,8 +15,9 @@ and are not.
 | `calibre_invariant_checker_design.md` | The v2 design doc the package was built from | Superseded by shipped code |
 | `calibre_target_state.md` | Invariant catalogue (A/B/C/D/E) + detection strategies | Scope + OCR sections stale |
 | `verify_A_integrity.md` | Point-in-time Class A verification run | Method yes, verdict is a snapshot |
-| `acquisition_queue.md` | Book acquisition queue | **12 of 17 rows already acquired** — 5 books still absent |
-| `design_theory_queue.md` | Design-theory books + papers | Books **done**; **3 papers + 2 junk stubs still outstanding** |
+
+Two further files travelled with this set and are not published — personal worklists with
+no design content.
 
 ## Not preserved, and why
 

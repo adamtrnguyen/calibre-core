@@ -129,7 +129,7 @@ in `omni-rag/scripts/reconcile_library.py:29` used for a SELECT.
 1. ~~**`~/Research/slurp` does not exist**, so omni-rag's `slurp-serve` path dep fails and
    `uv sync`/`just lint`/`just test` cannot run. Was it moved to ARC/NAS deliberately, or
    lost? Blocks every omni-rag migration step. **Adam's call.**~~
-   **✅ RESOLVED — verified 2026-08-12 on relocation.** `/Users/adam/Research/slurp` is
+   **✅ RESOLVED — verified 2026-08-12 on relocation.** `~/Research/slurp` is
    present (contains `justfile`, `configs/`, `docs/`, `extern/`, …) and
    `uv lock --check` in `~/Research/omni-rag` reports `Resolved 218 packages in 4ms`.
    The path dep resolves; nothing here blocks an omni-rag migration step.
@@ -158,12 +158,12 @@ in `omni-rag/scripts/reconcile_library.py:29` used for a SELECT.
   `$STAGE`"; `calibre` owns everything from `calibredb add` onward, **including the `add`
   invocation and the title/author inversion trap**, so that trap sits on exactly one side
   of the seam.
-- **`$STAGE` = the session scratchpad**, defined once. `/tmp` is where Anna's MCP *drops*
-  files, so documenting it as the target makes "move it out of /tmp" vacuous. `domain-canon`
-  has a fourth variant (`/tmp/calibre-staging/`) to delete.
+- **`$STAGE` = the session scratchpad**, defined once. `/tmp` is where the fetch step
+  *drops* files, so documenting it as the target makes "move it out of /tmp" vacuous.
+  `domain-canon` has a fourth variant (`/tmp/calibre-staging/`) to delete.
 - Reference rules that stop prose regrowing: never restate a threshold or regex; refer by
   invariant ID not command line; show exactly one invocation; name data files, not their
   contents; and state the contract — *if this disagrees with the tool, the tool wins, and
   fix this file.*
-- Delete `/Users/adam/Calibre Library/CLAUDE.md` (stale: wrong count, Title-Case tags).
+- Delete `~/Calibre Library/CLAUDE.md` (stale: wrong count, Title-Case tags).
   Five lines of the skill exist only to warn about it.

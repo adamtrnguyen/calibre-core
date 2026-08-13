@@ -17,7 +17,7 @@
 > Header counts below (1,094 books / max id 1174) were true earlier on 2026-08-12 and have
 > since moved — the library was at **1,122 books / max id 1206** when this was archived.
 
-Library: `/Users/adam/Calibre Library` · 1,094 books, max id 1174 (2026-08-12)
+Library: `~/Calibre Library` · 1,094 books, max id 1174 (2026-08-12)
 
 This is the definition every verifier checks against. It is a **specification of the
 desired end state**, plus the detection strategy for each invariant. Verifiers are
@@ -40,7 +40,7 @@ Each invariant has: an ID, the rule, how to detect it, and its **severity**:
 | **A2** | Every directory under the library holding a book file has a DB row. No orphans. | Walk `*/*/` dirs; compare against `SELECT path FROM books`. Orphans are invisible to the GUI and to `calibredb list`, but omni-rag still ingests them and the UUID resolver returns `None`, so they silently lose their `calibre://` deep links. | BLOCKER |
 | **A3** | No two records reference the same file on disk. | Group format paths; any path with >1 owning id. | BLOCKER |
 | **A4** | The on-disk `Author/Title (id)/` path matches the record's current title/author. | Compare `books.path` against a slugified `authors`/`title`. Drift comes from retitles and from metadata.db rollbacks. | DEFECT |
-| **A5** | No zero-byte or stub files. A ~114-byte "PDF" is an Anna's 429 error body, not a book. | `stat` every format; flag <10 KB, and any PDF whose first bytes are not `%PDF`. | BLOCKER |
+| **A5** | No zero-byte or stub files. A ~114-byte "PDF" is an HTTP 429 error body saved under a `.pdf` name, not a book. | `stat` every format; flag <10 KB, and any PDF whose first bytes are not `%PDF`. | BLOCKER |
 
 **Known A2 violation at spec time:** `Basic Perspective Drawing_ A Visual Approach (6th Edition) (66)`
 — pre-existing, predates 2026-08-12.
