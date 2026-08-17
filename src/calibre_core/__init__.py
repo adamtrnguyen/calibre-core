@@ -66,6 +66,7 @@ from calibre_core.toc import has_outline, inject_outline, sanitize_outline
 from calibre_core.writes import (
     WriteBlocked,
     add_book,
+    add_format,
     backup_db,
     calibredb_path,
     check_duplicate,
@@ -76,7 +77,7 @@ from calibre_core.writes import (
     set_book_metadata,
 )
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 # `audit` and `openlibrary` are deliberately NOT re-exported here, and are
 # reached as `from calibre_core.audit import ...`. They are report TOOLS with
@@ -107,7 +108,7 @@ __all__ = [  # noqa: RUF022
     "excused", "excused_within",
     # writes -- gated; shell out to calibredb, never SQL
     "WriteBlocked", "gui_is_open", "backup_db", "calibredb_path",
-    "check_duplicate", "add_book", "set_book_metadata",
+    "check_duplicate", "add_book", "add_format", "set_book_metadata",
     "current_identifiers", "remove_identifier",
     # public so a consumer building its own calibredb argv can apply the same
     # check: `&` is the author separator, so "&amp;" silently forks an author.

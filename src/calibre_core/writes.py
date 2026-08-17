@@ -432,6 +432,75 @@ def _merge_identifiers(book_id: int, incoming: str) -> str:
     return ",".join(f"{t}:{v}" for t, v in sorted(merged.items()))
 
 
+def add_format(
+    book_id: int,
+    path: str,
+    backup_dir: str = "/tmp/calibre-db-backups",
+    force: bool = False,
+) -> dict:
+    """Attach an additional format to an EXISTING record.
+
+    The case this is for: a record whose only format no parser reads (a `.cbz`/`.cbr` comic, a
+    `.mobi`), converted to PDF/EPUB so retrieval can index it. Adding a format keeps the original
+    and does not touch title, authors or uuid, so nothing identity-bearing moves.
+
+    🛑 `calibredb add_format` REPLACES an existing format of the same type, silently and with no
+    undo -- the old file is gone. That is the one gate this operation needs and the reason it is
+    here rather than left to a caller: refused unless `force=True`.
+
+    Refuses a missing file, an extensionless file (calibredb infers the format from it), an
+    unknown book_id, and an open Calibre GUI. Backs up metadata.db first, then verifies the format
+    is actually present afterwards -- calibredb can exit 0 having added nothing.
+    """
+    if not os.path.exists(path):
+        raise WriteBlocked("staged file does not exist", {"path": path})
+    ext = os.path.splitext(path)[1].lstrip(".").upper()
+    if not ext:
+        raise WriteBlocked(
+            "staged file has no extension — calibredb infers the format from it",
+            {"path": path},
+        )
+    con = connect()
+    try:
+        row = con.execute("SELECT title FROM books WHERE id = ?", (book_id,)).fetchone()
+        if not row:
+            raise WriteBlocked(f"no book with id {book_id}", {"book_id": book_id})
+        existing = [r[0] for r in con.execute("SELECT format FROM data WHERE book = ?", (book_id,))]
+    finally:
+        con.close()
+    if ext in existing and not force:
+        raise WriteBlocked(
+            f"record {book_id} already has a {ext} — calibredb would REPLACE it with no undo; "
+            f"pass force=True only if losing the current {ext} is intended",
+            {"book_id": book_id, "format": ext, "existing": existing, "hint": "force=True"},
+        )
+    if gui_is_open():
+        raise WriteBlocked("Calibre GUI is open — close it before writing")
+
+    backup = backup_db(backup_dir)
+    out = _run(["add_format", str(book_id), path])
+    con = connect()
+    try:
+        after = [r[0] for r in con.execute("SELECT format FROM data WHERE book = ?", (book_id,))]
+    finally:
+        con.close()
+    if ext not in after:
+        raise WriteBlocked(
+            f"calibredb exited 0 but record {book_id} still has no {ext}",
+            {"book_id": book_id, "formats": after, "calibredb": out},
+        )
+    return {
+        "ok": True,
+        "book_id": book_id,
+        "title": row[0],
+        "added": ext,
+        "formats": after,
+        "replaced": ext in existing,
+        "calibredb": out,
+        "db_backup": backup,
+    }
+
+
 def remove_identifier(
     book_id: int,
     id_type: str,

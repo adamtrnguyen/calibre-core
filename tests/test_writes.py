@@ -443,3 +443,61 @@ def test_add_book_refuses_entities_before_touching_the_library(library, tmp_path
     with pytest.raises(WriteBlocked) as ei:
         add_book(path=str(staged), title="T", authors="A &amp; B")
     assert ei.value.detail["entity"] == "&amp;"
+
+
+# --- add_format ---------------------------------------------------------------
+# For a record whose only format no parser reads (a .cbz/.cbr comic, a .mobi) and which
+# has been converted. The gate that matters: `calibredb add_format` REPLACES a same-type
+# format silently, with no undo -- so a second PDF over an existing PDF destroys it.
+
+
+def test_add_format_refuses_replacing_an_existing_format(library, tmp_path):
+    """The real hazard. A CBR-only record gaining a PDF is fine; a PDF over a PDF is loss."""
+    import calibre_core.writes as w
+
+    library.add(1, "Some Comic", fmt="PDF")
+    staged = tmp_path / "again.pdf"
+    staged.write_bytes(b"%PDF-1.4 second")
+    with pytest.raises(WriteBlocked) as ei:
+        w.add_format(book_id=1, path=str(staged), backup_dir=str(tmp_path / "bk"))
+    assert ei.value.detail["format"] == "PDF"
+    assert ei.value.detail["hint"] == "force=True"
+    assert "PDF" in ei.value.detail["existing"]
+
+
+def test_add_format_allows_a_NEW_format_type(library, tmp_path, monkeypatch):
+    """A CBR-only record gaining a PDF is the whole use case — it must not be refused
+    by the replace guard, which keys on the format TYPE, not on the record."""
+    import calibre_core.writes as w
+
+    library.add(1, "Some Comic", fmt="CBR", content=b"Rar!fixture")
+    staged = tmp_path / "converted.pdf"
+    staged.write_bytes(b"%PDF-1.4 converted")
+    # stop before shelling out: this asserts the GATES pass, not that calibredb works
+    monkeypatch.setattr(w, "gui_is_open", lambda: True)
+    with pytest.raises(WriteBlocked) as ei:
+        w.add_format(book_id=1, path=str(staged), backup_dir=str(tmp_path / "bk"))
+    assert "GUI is open" in str(ei.value)  # reached the LAST gate, so the replace guard passed
+
+
+def test_add_format_refuses_unknown_book_id(library, tmp_path):
+    import calibre_core.writes as w
+
+    library.add(1, "Some Book")
+    staged = tmp_path / "x.pdf"
+    staged.write_bytes(b"%PDF-1.4 x")
+    with pytest.raises(WriteBlocked) as ei:
+        w.add_format(book_id=999999, path=str(staged), backup_dir=str(tmp_path / "bk"))
+    assert "999999" in str(ei.value)
+
+
+def test_add_format_refuses_missing_and_extensionless(library, tmp_path):
+    import calibre_core.writes as w
+
+    library.add(1, "Some Book")
+    with pytest.raises(WriteBlocked):
+        w.add_format(book_id=1, path=str(tmp_path / "nope.pdf"))
+    noext = tmp_path / "noextension"
+    noext.write_bytes(b"data")
+    with pytest.raises(WriteBlocked):
+        w.add_format(book_id=1, path=str(noext))
