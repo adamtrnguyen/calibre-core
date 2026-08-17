@@ -1,6 +1,6 @@
 [project]
 name = "calibre-core"
-version = "0.5.0"
+version = "0.6.0"
 description = "Shared access to Adam's Calibre library: one connection chokepoint, one canonical record model, one title normaliser, one gated write path."
 # 3.11, not 3.13: calibre-mcp floors at >=3.13 but omni-rag caps at <3.14, so the
 # core has to sit under both. Develop ON 3.11 or a 3.12+ construct will pass in

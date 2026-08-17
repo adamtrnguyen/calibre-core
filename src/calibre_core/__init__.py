@@ -71,11 +71,12 @@ from calibre_core.writes import (
     check_duplicate,
     current_identifiers,
     gui_is_open,
+    reject_html_entities,
     remove_identifier,
     set_book_metadata,
 )
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 # `audit` and `openlibrary` are deliberately NOT re-exported here, and are
 # reached as `from calibre_core.audit import ...`. They are report TOOLS with
@@ -108,6 +109,9 @@ __all__ = [  # noqa: RUF022
     "WriteBlocked", "gui_is_open", "backup_db", "calibredb_path",
     "check_duplicate", "add_book", "set_book_metadata",
     "current_identifiers", "remove_identifier",
+    # public so a consumer building its own calibredb argv can apply the same
+    # check: `&` is the author separator, so "&amp;" silently forks an author.
+    "reject_html_entities",
     # table of contents -- the WRITE side only. Reading a PDF outline is a PDF
     # operation and lives with whoever parses PDFs; writing one mutates a file
     # Calibre owns, so it is gated here like every other write.

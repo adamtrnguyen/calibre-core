@@ -29,6 +29,7 @@ from calibre_core.writes import (
     add_book,
     check_duplicate,
     dedup_key,
+    reject_html_entities,
     remove_identifier,
     set_book_metadata,
 )
@@ -388,3 +389,57 @@ def test_other_fields_never_needed_force(library, monkeypatch):
     library.add(1, "A Book")
     monkeypatch.setattr("calibre_core.writes._run", lambda args: "ok")
     assert set_book_metadata(1, {"comments": "a note", "tags": "x"})["ok"] is True
+
+
+# --- HTML entities -----------------------------------------------------------
+# `&` is Calibre's AUTHOR SEPARATOR. An escaped "&amp;" therefore does not merely
+# render wrong: calibredb splits on the bare `&` and files a phantom author.
+# Regression for a real incident -- add_book(authors="Rudolf von Laban &amp; Lisa
+# Ullmann") returned success and stored ['Rudolf von Laban', 'amp; Lisa Ullmann'].
+# It had to be removed and re-added, because set_book_metadata refuses `authors`
+# outright, so the gate permitted a write it gave no way to repair.
+
+
+def test_the_incident_value_is_refused():
+    with pytest.raises(WriteBlocked) as ei:
+        reject_html_entities(authors="Rudolf von Laban &amp; Lisa Ullmann")
+    assert ei.value.detail["field"] == "authors"
+    assert ei.value.detail["entity"] == "&amp;"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "A &amp; B", "A &lt; B", "A &gt; B", 'say &quot;hi&quot;',
+        "it&#39;s", "it&apos;s", "a&nbsp;b",
+    ],
+)
+def test_every_covered_entity_is_refused(value):
+    with pytest.raises(WriteBlocked):
+        reject_html_entities(title=value)
+
+
+def test_literal_ampersand_is_the_correct_form_and_passes():
+    # This is what the caller SHOULD send, and it must not be mangled or refused:
+    # calibredb splits it into two real authors, which is the intent.
+    reject_html_entities(authors="Rudolf von Laban & Lisa Ullmann",
+                         title="Cause & Effect", tags="art,gesture")
+
+
+def test_non_string_values_pass_through():
+    # a `fields` dict legitimately carries ints and None
+    reject_html_entities(book_id=1234, pubdate=None, rating=5)
+
+
+def test_bare_amp_word_is_not_a_false_positive():
+    # "amp" alone, or "&" followed by a word, is not an entity
+    reject_html_entities(title="Amplifier Design", authors="Amp Jones & B Smith")
+
+
+def test_add_book_refuses_entities_before_touching_the_library(library, tmp_path):
+    """The guard must fire BEFORE any duplicate scan, backup or calibredb call."""
+    staged = tmp_path / "book.pdf"
+    staged.write_bytes(b"%PDF-1.4 staged")
+    with pytest.raises(WriteBlocked) as ei:
+        add_book(path=str(staged), title="T", authors="A &amp; B")
+    assert ei.value.detail["entity"] == "&amp;"
