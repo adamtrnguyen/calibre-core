@@ -29,7 +29,8 @@ from typing import Any
 
 from calibre_core.domain.duplicates import title_groups
 from calibre_core.domain.isbn import clean_isbn, valid_isbn
-from calibre_core.infrastructure.records import Book, load_books
+from calibre_core.domain.book import Book
+from calibre_core.infrastructure.records import load_books
 
 UNKNOWN_AUTHORS = {
     "",

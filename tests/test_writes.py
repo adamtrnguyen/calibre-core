@@ -23,13 +23,12 @@ from pathlib import Path
 
 import pytest
 
+from calibre_core.domain.normalize import dedup_key
+from calibre_core.domain.write_rules import WriteBlocked, reject_html_entities
+from calibre_core.infrastructure.calibredb import merge_identifiers
 from calibre_core.application.writes import (
-    WriteBlocked,
-    _merge_identifiers,
     add_book,
     check_duplicate,
-    dedup_key,
-    reject_html_entities,
     remove_identifier,
     set_book_metadata,
 )
@@ -208,7 +207,7 @@ def test_setting_one_identifier_preserves_the_others(library):
     con.commit()
     con.close()
 
-    merged = _merge_identifiers(1, "isbn:9781909414310")
+    merged = merge_identifiers(1, "isbn:9781909414310")
     assert "zotero:TSV8YEFG" in merged
     assert "isbn:9781909414310" in merged
     assert "isbn:9780367860271" not in merged  # same type overwrites
@@ -216,14 +215,14 @@ def test_setting_one_identifier_preserves_the_others(library):
 
 def test_merging_adds_a_new_type_without_disturbing_existing(library):
     library.add(2, "Another Book", authors="Some Author", isbn="9780367860271")
-    merged = _merge_identifiers(2, "doi:10.1000/xyz")
+    merged = merge_identifiers(2, "doi:10.1000/xyz")
     assert "isbn:9780367860271" in merged
     assert "doi:10.1000/xyz" in merged
 
 
 def test_merge_ignores_malformed_pairs(library):
     library.add(3, "Third", authors="Third Author", isbn="9780367860271")
-    merged = _merge_identifiers(3, "garbage-no-colon, ,isbn:9781909414310")
+    merged = merge_identifiers(3, "garbage-no-colon, ,isbn:9781909414310")
     assert merged == "isbn:9781909414310"
 
 
@@ -361,7 +360,7 @@ def test_the_old_blanket_refusal_is_gone(library, monkeypatch):
     not what calibredb does with it.
     """
     library.add(1, "A Book")
-    monkeypatch.setattr("calibre_core.application.writes._run", lambda args: "ok")
+    monkeypatch.setattr("calibre_core.application.writes.run_calibredb", lambda args: "ok")
     out = set_book_metadata(1, {"title": "Better Title"}, force=True)
     assert out["ok"] is True
 
@@ -369,7 +368,7 @@ def test_the_old_blanket_refusal_is_gone(library, monkeypatch):
 def test_a_title_write_still_backs_up_first(library, monkeypatch):
     """force=True relaxes WHICH field, never the preconditions around it."""
     library.add(1, "A Book")
-    monkeypatch.setattr("calibre_core.application.writes._run", lambda args: "ok")
+    monkeypatch.setattr("calibre_core.application.writes.run_calibredb", lambda args: "ok")
     out = set_book_metadata(1, {"title": "Better Title"}, force=True)
     assert Path(out["db_backup"]).exists()
 
@@ -378,7 +377,7 @@ def test_a_title_write_still_refuses_while_the_gui_is_open(library, monkeypatch)
     """The GUI gate is not a field-level rule and force must not reach it —
     calibredb corrupts state if it writes while Calibre is running."""
     library.add(1, "A Book")
-    monkeypatch.setattr("calibre_core.application.writes.gui_is_open", lambda: True)
+    monkeypatch.setattr("calibre_core.infrastructure.calibredb.gui_is_open", lambda: True)
     with pytest.raises(WriteBlocked, match="GUI is open"):
         set_book_metadata(1, {"title": "Better Title"}, force=True)
 
@@ -387,7 +386,7 @@ def test_other_fields_never_needed_force(library, monkeypatch):
     """Guard against the flag leaking into a general requirement — comments, tags
     and pubdate rename nothing and must stay reachable without it."""
     library.add(1, "A Book")
-    monkeypatch.setattr("calibre_core.application.writes._run", lambda args: "ok")
+    monkeypatch.setattr("calibre_core.application.writes.run_calibredb", lambda args: "ok")
     assert set_book_metadata(1, {"comments": "a note", "tags": "x"})["ok"] is True
 
 
@@ -474,10 +473,11 @@ def test_add_format_allows_a_NEW_format_type(library, tmp_path, monkeypatch):
     staged = tmp_path / "converted.pdf"
     staged.write_bytes(b"%PDF-1.4 converted")
     # stop before shelling out: this asserts the GATES pass, not that calibredb works
-    monkeypatch.setattr(w, "gui_is_open", lambda: True)
+    monkeypatch.setattr("calibre_core.infrastructure.calibredb.gui_is_open", lambda: True)
+    monkeypatch.setattr("calibre_core.infrastructure.calibredb._content_server_url", lambda: None)
     with pytest.raises(WriteBlocked) as ei:
         w.add_format(book_id=1, path=str(staged), backup_dir=str(tmp_path / "bk"))
-    assert "GUI is open" in str(ei.value)  # reached the LAST gate, so the replace guard passed
+    assert "GUI is open" in str(ei.value)
 
 
 def test_add_format_refuses_unknown_book_id(library, tmp_path):

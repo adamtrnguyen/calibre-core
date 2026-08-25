@@ -214,10 +214,10 @@ def _gui_closed(monkeypatch, request):
     """
     if "gui_open" in request.fixturenames:
         return
-    monkeypatch.setattr("calibre_core.application.writes.gui_is_open", lambda: False)
+    monkeypatch.setattr("calibre_core.infrastructure.calibredb.gui_is_open", lambda: False)
 
 
 @pytest.fixture()
 def gui_open(monkeypatch):
     """Opt out of `_gui_closed` and assert the gate fires."""
-    monkeypatch.setattr("calibre_core.application.writes.gui_is_open", lambda: True)
+    monkeypatch.setattr("calibre_core.infrastructure.calibredb.gui_is_open", lambda: True)

@@ -35,7 +35,8 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from calibre_core.application.writes import WriteBlocked, gui_is_open
+from calibre_core.domain.write_rules import WriteBlocked
+from calibre_core.infrastructure.calibredb import gui_is_open
 
 
 def sanitize_outline(entries: list[dict], page_count: int) -> list[list]:

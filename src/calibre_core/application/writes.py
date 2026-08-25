@@ -1,219 +1,36 @@
-"""Gated write path for the Calibre library.
+"""Use-case orchestration for Calibre writes.
 
-Every add and metadata change should go through here rather than a bare
-`calibredb` call, because the preconditions are easy to forget and expensive to
-get wrong. The gates are enforced, not documented:
-
-  * if the GUI is open, writes route through the content server automatically
-    (requires "enable local write" in Preferences → Sharing → Advanced);
-    if no content server is reachable, the write is refused with setup instructions
-  * metadata.db is backed up first  (a rollback is the only undo that exists)
-  * duplicates are detected BEFORE the record is created
-  * `title` and `authors` are mandatory on add
-
-That last one is not fussiness. `calibredb add` with no metadata parses the
-FILENAME as "Title - Author", while most sources name files "Author - Title",
-so the record silently lands inverted and is only noticed later as a backwards
-folder path.
-
-Writes shell out to `calibredb`. They never touch metadata.db directly: Calibre
-maintains derived state (path layout, search caches, link tables) that raw SQL
-desynchronises.
-
-DUPLICATE DETECTION AND THE ONEDRIVE PROBLEM
---------------------------------------------
-The library lives on OneDrive and most files are dataless placeholders: reading
-one byte hydrates the whole file, so hashing the library is a multi-GB download.
-
-So the cheap signals run first, straight out of the catalogue:
-
-  1. size, from the `data.uncompressed_size` column  -- zero file reads
-  2. ISBN, from `identifiers`                        -- zero file reads
-  3. normalised title + first-author surname         -- zero file reads
-
-Only a *size collision* justifies hashing, and then only the one or two
-colliding files. In the common case this costs no I/O at all.
-
-Caveat worth knowing: `uncompressed_size` can be stale where a format was
-reprocessed in place, so a size match is a candidate rather than a verdict --
-which is exactly why it triggers a hash instead of a block.
+Each function here composes domain rules (duplicate detection, validation) with
+infrastructure (calibredb subprocess, DB backup, identifier queries) into one
+gated operation. No subprocess calls or filesystem access of its own.
 """
 
 from __future__ import annotations
 
 import os
 import re
-import shutil
 import sqlite3
-import subprocess
-import time
 
 from calibre_core.domain.duplicates import dupok_pairs, excused_within, sha256
 from calibre_core.domain.isbn import clean_isbn
-from calibre_core.infrastructure.sqlite import connect, db_path, library_path
 from calibre_core.domain.normalize import author_surname, dedup_key
-
-
-class WriteBlocked(Exception):
-    """A gate refused the operation. Carries a machine-readable reason."""
-
-    def __init__(self, reason: str, detail: dict | None = None):
-        super().__init__(reason)
-        self.reason = reason
-        self.detail = detail or {}
-
-
-# Searched in order when `calibredb` is not on PATH. This used to be the single
-# hardcoded string "/opt/homebrew/bin/calibredb" -- an assumption about one
-# machine's package manager, which fails silently-ish anywhere else.
-_CALIBREDB_FALLBACKS = (
-    "/opt/homebrew/bin/calibredb",
-    "/usr/local/bin/calibredb",
-    "/Applications/calibre.app/Contents/MacOS/calibredb",
+from calibre_core.domain.write_rules import WriteBlocked, reject_html_entities
+from calibre_core.infrastructure.calibredb import (
+    backup_db,
+    calibredb_path,
+    current_identifiers,
+    gui_is_open,
+    merge_identifiers,
+    run_calibredb,
 )
-
-
-def calibredb_path() -> str:
-    """Locate the `calibredb` binary, PATH first.
-
-    Resolved at CALL time, not import: importing this module on a machine with no
-    Calibre installed must not explode, and a test must be able to run every gate
-    that fires before the binary is ever needed.
-    """
-    found = shutil.which("calibredb")
-    if found:
-        return found
-    for cand in _CALIBREDB_FALLBACKS:
-        if os.path.exists(cand):
-            return cand
-    raise WriteBlocked(
-        "calibredb not found on PATH or in the known install locations",
-        {"searched": ["$PATH", *_CALIBREDB_FALLBACKS]},
-    )
-
-
-# --------------------------------------------------------------------------
-# gates
-# --------------------------------------------------------------------------
-
-def gui_is_open() -> bool:
-    """True if the Calibre GUI is running. calibredb must not write while it is."""
-    return (
-        subprocess.run(["pgrep", "-x", "calibre"], capture_output=True, check=False).returncode
-        == 0
-    )
-
-
-def _content_server_url() -> str | None:
-    """Probe for a running Calibre content server with local-write enabled.
-
-    Returns the --with-library URL (e.g. "http://localhost:8080/#Calibre_Library")
-    or None if unreachable / not configured for writes.
-    """
-    import urllib.request
-    import urllib.error
-    for port in (8080, 8181):
-        url = f"http://localhost:{port}"
-        try:
-            with urllib.request.urlopen(url, timeout=2) as resp:
-                if resp.status == 200:
-                    # Probe the library list endpoint
-                    r = subprocess.run(
-                        [calibredb_path(), "list", "--limit", "1",
-                         "--with-library", f"{url}/#-"],
-                        capture_output=True, text=True, check=False, timeout=10,
-                    )
-                    if r.returncode == 0 and r.stdout.strip():
-                        lib = r.stdout.strip().splitlines()[0].strip()
-                        return f"{url}/#{lib}"
-        except (urllib.error.URLError, OSError, subprocess.TimeoutExpired):
-            continue
-    return None
-
-
-_HTML_ENTITIES = ("&amp;", "&lt;", "&gt;", "&quot;", "&#39;", "&apos;", "&nbsp;")
-
-
-def reject_html_entities(**fields: object) -> None:
-    """Refuse HTML-escaped text in metadata headed for calibredb.
-
-    `&` is Calibre's AUTHOR SEPARATOR, so "A &amp; B" is not merely ugly --
-    calibredb splits it into "A" plus a phantom author "amp; B". Observed for
-    real: authors="Rudolf von Laban &amp; Lisa Ullmann" stored
-    ['Rudolf von Laban', 'amp; Lisa Ullmann'] and reported success.
-
-    Enforced because the field it damages worst is the one with NO repair path:
-    `set_book_metadata` refuses `authors` unconditionally, so the only fixes are
-    remove-and-re-add or the GUI. A gate that permits an unfixable write is not
-    a gate -- the same reasoning that put the GUI check and the duplicate check
-    in here rather than in a caller's docstring.
-
-    Entities arrive from scraped listings, OPF files and XML sidecars, i.e. the
-    ordinary sources for this metadata, so this is the common case.
-
-    Non-str values pass through untouched; a `fields` dict legitimately carries
-    ints and None.
-    """
-    for name, value in fields.items():
-        if not isinstance(value, str):
-            continue
-        for ent in _HTML_ENTITIES:
-            if ent in value:
-                raise WriteBlocked(
-                    f"{name!r} contains the HTML entity {ent!r} — pass literal "
-                    f"characters (a real '&', not '&amp;'). In authors '&' is the "
-                    f"separator, so this would silently create a phantom author.",
-                    {"field": name, "value": value, "entity": ent},
-                )
-
-
-def backup_db(dest_dir: str) -> str:
-    """Copy metadata.db aside, returning the backup path.
-
-    A rollback reverts the catalogue but NOT the filesystem, so any book added
-    after the backup becomes an orphan -- a directory with no DB row, invisible
-    to the GUI and to `calibredb list`. Run an orphan scan after restoring one.
-    """
-    os.makedirs(dest_dir, exist_ok=True)
-    dest = os.path.join(dest_dir, f"metadata.db.backup-{time.strftime('%Y%m%d-%H%M%S')}")
-    shutil.copy2(str(db_path()), dest)
-    return dest
+from calibre_core.infrastructure.sqlite import connect, library_path
 
 
 # --------------------------------------------------------------------------
 # duplicate detection
 # --------------------------------------------------------------------------
 
-# `dedup_key`, `author_surname`, `sha256` and `dupok_pairs` come from
-# calibre_core rather than being defined here. Each local copy they replaced had
-# a defect the shared version does not:
-#
-#   dedup_key       -- destroyed Korean and kana voicing marks
-#   _surname        -- folded no accents and stripped no punctuation, so
-#                      'Duran' and 'Heuer Jr.' keyed wrongly
-#   _dupok_partners -- stored the raw column value then filtered
-#                      `if x.isdigit()`, so a #dupok of "954,995" failed the
-#                      digit test as a whole string and was silently dropped:
-#                      multi-partner exemptions had NEVER worked.
-#
-# Keeping them here is what let three copies of one normaliser drift apart in
-# three repos inside a single afternoon.
-#
-# The three signals below are one function each -- not inlined into
-# `check_duplicate` -- because they are independent and answer different
-# questions, and because a single 90-line function tripped ruff's C901. Each keeps
-# the comment explaining what its predecessor got wrong; the ORDER they are called
-# in is the cheapest-first order the docstring promises.
-
-
 def _isbn_signals(con: sqlite3.Connection, isbn: str | None) -> list[dict]:
-    """Exact, free, and decisive.
-
-    `clean_isbn` runs isbnlib.canonical, which REJECTS malformed lengths. The
-    `re.sub(r"[^0-9Xx]","")` it replaced kept anything, so a 12-digit typo could
-    match another 12-digit typo -- garbage matching garbage on a signal whose
-    verdict is `block`.
-    """
     if not isbn or not (want := clean_isbn(isbn)):
         return []
     return [
@@ -226,15 +43,12 @@ def _isbn_signals(con: sqlite3.Connection, isbn: str | None) -> list[dict]:
 
 
 def _size_signals(rows: list[tuple], staged_path: str | None) -> list[dict]:
-    """Size comes from the catalogue, so no file is read to find a candidate."""
     if not staged_path or not os.path.exists(staged_path):
         return []
     staged_size = os.path.getsize(staged_path)
     signals: list[dict] = []
     for r in [r for r in rows if r[6] and int(r[6]) == staged_size]:
         bid, btitle, bpath, dname, dfmt = r[0], r[1], r[3], r[4], r[5]
-        # A size collision is only a candidate -- confirm by hashing, and hash
-        # ONLY this file so OneDrive hydrates one book, not 1000.
         cand = os.path.join(str(library_path()), bpath, f"{dname}.{dfmt.lower()}")
         same_hash = None
         if os.path.exists(cand):
@@ -260,7 +74,6 @@ def _size_signals(rows: list[tuple], staged_path: str | None) -> list[dict]:
 def _title_author_signals(
     rows: list[tuple], title: str | None, authors: str | None
 ) -> list[dict]:
-    """Normalised title + surname: cheap, and needs a human."""
     if not title:
         return []
     k, sn = dedup_key(title), author_surname(authors or "")
@@ -285,20 +98,9 @@ def check_duplicate(
     authors: str | None = None,
     isbn: str | None = None,
 ) -> dict:
-    """Look for an existing record matching the thing about to be added.
-
-    Returns {"verdict": "block" | "warn" | "ok", "signals": [...]}.
-
-    block -- no judgement required: the same file, or the same edition.
-             identical sha256; identical size AND page count; same ISBN.
-    warn  -- plausible but needs a human: same normalised title + author
-             surname. Suppressed when #dupok already pairs the two records.
-    """
+    """Look for an existing record matching the thing about to be added."""
     con = connect()
     try:
-        # Two queries, not one join: mixing the authors fan-out with the formats
-        # fan-out multiplies rows, and GROUP_CONCAT(DISTINCT x, sep) is a syntax
-        # error in SQLite (DISTINCT aggregates take exactly one argument).
         meta = {
             bid: (title, auth or "", path)
             for bid, title, auth, path in con.execute(
@@ -319,32 +121,20 @@ def check_duplicate(
             )
             if bid in meta
         ]
-
-        # Cheapest first, and in this order: ISBN (a catalogue lookup), size (one
-        # stat, hashing only a collision), title+author (in-memory normalisation).
         signals: list[dict] = [
             *_isbn_signals(con, isbn),
             *_size_signals(rows, staged_path),
             *_title_author_signals(rows, title, authors),
         ]
-
-        # ---- #dupok suppression, applied to warn-level signals only ------
         pairs = dupok_pairs()
     finally:
         con.close()
 
-    # Suppress a title+author warning only when the matched record is paired with
-    # ANOTHER record that also matched. The old code flattened every partner into
-    # one set and suppressed on mere membership, so if an unrelated record named
-    # two books as its partners, a genuine duplicate between those two reported
-    # `ok`. Symmetric and fails open, so a human annotates only one side.
     matched = {s["book_id"] for s in signals if s["signal"] == "title+author"}
-
     hard = [s for s in signals if s["signal"] in ("sha256", "isbn")]
     soft = [s for s in signals if s["signal"] == "title+author"
             and not excused_within(s["book_id"], matched, pairs)]
     maybe = [s for s in signals if s["signal"] == "size"]
-
     verdict = "block" if hard else ("warn" if soft or maybe else "ok")
     return {"verdict": verdict, "signals": signals}
 
@@ -352,28 +142,6 @@ def check_duplicate(
 # --------------------------------------------------------------------------
 # writes
 # --------------------------------------------------------------------------
-
-def _run(args: list[str]) -> str:
-    lib_target = str(library_path())
-    if gui_is_open():
-        server_url = _content_server_url()
-        if server_url:
-            lib_target = server_url
-        else:
-            raise WriteBlocked(
-                "Calibre GUI is open and no content server with local-write is "
-                "reachable. Either close the GUI, or enable the content server: "
-                "Preferences → Sharing over the net → Advanced → enable local write, "
-                "then Connect/share → Start Content server."
-            )
-    r = subprocess.run(
-        [calibredb_path(), *args, "--with-library", lib_target],
-        capture_output=True, text=True, check=False,
-    )
-    if r.returncode != 0:
-        raise WriteBlocked(f"calibredb failed: {(r.stderr or '').strip()[:400]}")
-    return (r.stdout or "").strip()
-
 
 def add_book(
     path: str,
@@ -384,20 +152,10 @@ def add_book(
     backup_dir: str = "/tmp/calibre-db-backups",
     force: bool = False,
 ) -> dict:
-    """Add a staged file, refusing on a guaranteed duplicate.
-
-    title and authors are REQUIRED -- see the module docstring for why omitting
-    them silently inverts the record.
-
-    force=True downgrades a `block` to a warning. Use it only for a deliberate
-    quality pair (born-digital plus scan, or two editions), and mark the pair
-    with #dupok afterwards so the next run does not stop again.
-    """
+    """Add a staged file, refusing on a guaranteed duplicate."""
     if not os.path.exists(path):
         raise WriteBlocked("staged file does not exist", {"path": path})
     if not os.path.splitext(path)[1].lstrip("."):
-        # calibredb infers the format from the extension. Given none it exits 0,
-        # prints nothing, and adds nothing -- a success-shaped no-op.
         raise WriteBlocked(
             "staged file has no extension — calibredb infers the format from it "
             "and silently adds nothing without one",
@@ -417,15 +175,13 @@ def add_book(
         args += ["--tags", tags]
     if isbn:
         args += ["--identifier", f"isbn:{isbn}"]
-    out = _run(args)
+    out = run_calibredb(args)
     new_ids = (
         [int(n) for n in re.findall(r"\b(\d+)\b", out.split("ids:")[-1])]
         if "ids:" in out
         else []
     )
     if not new_ids:
-        # calibredb can exit 0 having done nothing. Reporting ok=True here would
-        # make a no-op indistinguishable from an add.
         raise WriteBlocked(
             "calibredb exited 0 but reported no new book id — nothing was added",
             {"path": path, "calibredb_output": out, "db_backup": backup},
@@ -434,63 +190,13 @@ def add_book(
             "duplicate_check": dup, "db_backup": backup}
 
 
-def current_identifiers(book_id: int) -> dict[str, str]:
-    """The record's identifiers as {type: value}. Read-only."""
-    con = connect()
-    try:
-        return {
-            t: v for t, v in con.execute(
-                "SELECT type, val FROM identifiers WHERE book=?", (book_id,)
-            )
-        }
-    finally:
-        con.close()
-
-
-def _merge_identifiers(book_id: int, incoming: str) -> str:
-    """Fold `incoming` over the record's existing identifiers.
-
-    `calibredb set_metadata --field identifiers:...` REPLACES the whole set, it
-    does not merge. Setting an ISBN on book 256 that way silently deleted its
-    `zotero` identifier -- and that identifier is the link to the Zotero facade
-    item, i.e. the book's citations and `zotero://` deep links. Nothing in the
-    output announced the loss; it showed up only as a shorter Identifiers line.
-
-    Same value for a type overwrites; every other type is carried through. To
-    REMOVE an identifier, pass the full desired set explicitly -- that is the one
-    operation this cannot express, which is deliberate: dropping a key should be
-    a decision, not a side effect of setting a different one.
-    """
-    merged = current_identifiers(book_id)
-    for pair in (incoming or "").split(","):
-        pair = pair.strip()
-        if not pair or ":" not in pair:
-            continue
-        t, _, v = pair.partition(":")
-        merged[t.strip()] = v.strip()
-    return ",".join(f"{t}:{v}" for t, v in sorted(merged.items()))
-
-
 def add_format(
     book_id: int,
     path: str,
     backup_dir: str = "/tmp/calibre-db-backups",
     force: bool = False,
 ) -> dict:
-    """Attach an additional format to an EXISTING record.
-
-    The case this is for: a record whose only format no parser reads (a `.cbz`/`.cbr` comic, a
-    `.mobi`), converted to PDF/EPUB so retrieval can index it. Adding a format keeps the original
-    and does not touch title, authors or uuid, so nothing identity-bearing moves.
-
-    🛑 `calibredb add_format` REPLACES an existing format of the same type, silently and with no
-    undo -- the old file is gone. That is the one gate this operation needs and the reason it is
-    here rather than left to a caller: refused unless `force=True`.
-
-    Refuses a missing file, an extensionless file (calibredb infers the format from it), an
-    unknown book_id, and an open Calibre GUI. Backs up metadata.db first, then verifies the format
-    is actually present afterwards -- calibredb can exit 0 having added nothing.
-    """
+    """Attach an additional format to an EXISTING record."""
     if not os.path.exists(path):
         raise WriteBlocked("staged file does not exist", {"path": path})
     ext = os.path.splitext(path)[1].lstrip(".").upper()
@@ -515,7 +221,7 @@ def add_format(
         )
 
     backup = backup_db(backup_dir)
-    out = _run(["add_format", str(book_id), path])
+    out = run_calibredb(["add_format", str(book_id), path])
     con = connect()
     try:
         after = [r[0] for r in con.execute("SELECT format FROM data WHERE book = ?", (book_id,))]
@@ -543,18 +249,7 @@ def remove_identifier(
     id_type: str,
     backup_dir: str = "/tmp/calibre-db-backups",
 ) -> dict:
-    """Drop ONE identifier type from a record, keeping the rest.
-
-    Deliberately a separate function rather than a flag on set_book_metadata:
-    that path merges, so it cannot express removal, and making removal reachable
-    by accident is how book 256 lost its `zotero` link. Here the caller has to
-    name the type they mean.
-
-    Used for a WRONG identifier, which is worse than a missing one -- books 49 and
-    1057 both carried isbn 4412957810, whose group prefix is Japan while both
-    books are British, so the ISBN signal reported them as a guaranteed duplicate
-    of each other and refused re-adds.
-    """
+    """Drop ONE identifier type from a record, keeping the rest."""
     before = current_identifiers(book_id)
     if id_type not in before:
         raise WriteBlocked(
@@ -564,7 +259,7 @@ def remove_identifier(
     kept = {t: v for t, v in before.items() if t != id_type}
     backup = backup_db(backup_dir)
     value = ",".join(f"{t}:{v}" for t, v in sorted(kept.items()))
-    out = _run(["set_metadata", str(book_id), "--field", f"identifiers:{value}"])
+    out = run_calibredb(["set_metadata", str(book_id), "--field", f"identifiers:{value}"])
     after = current_identifiers(book_id)
     if id_type in after:
         raise WriteBlocked(
@@ -581,51 +276,11 @@ def set_book_metadata(
     backup_dir: str = "/tmp/calibre-db-backups",
     force: bool = False,
 ) -> dict:
-    """Set metadata fields on one record via `calibredb set_metadata --field`.
-
-    Targeted per-field writes only -- pushing a whole OPF overwrites local tags,
-    which are knowledge this library keeps and no online source has.
-
-    `identifiers` is MERGED over what the record already has -- see
-    `_merge_identifiers` for why a plain write is destructive.
-
-    TITLE AND AUTHORS
-    -----------------
-    Both used to be refused outright, with the reason "a rename moves the
-    directory and no rollback exists". That reason does not survive scrutiny:
-    `add_book` orphans a directory on rollback too, and it is allowed. The two
-    fields are also not equivalent, which the old blanket rule hid.
-
-    `title` (allowed with force=True) renames the directory in place. What it
-    does NOT touch is anything identity-bearing -- verified against the schema:
-    `uuid=uuid4()` fires only in `books_insert_trg` (AFTER INSERT), there is no
-    UPDATE trigger on `books` at all, and `books.id` is untouched. So:
-
-      * the `(id)` suffix still resolves -- `paths.book_id_from_dir`,
-        `resolve_path`, and omni-rag's uuid resolver all keep working;
-      * `calibre://view-book-uuid/.../<uuid>` deep links keep working;
-      * omni-rag's `chunk_id = sha1(uuid|page|idx|text)` is stable, so no
-        duplicate rows and no re-ingest is needed.
-
-    The one real consequence is cosmetic and STICKY: omni-rag stores `book` as a
-    display string derived from the catalogue title, so an indexed book keeps
-    showing the old one -- and because resume dedupes by uuid, a re-ingest SKIPS
-    the book rather than refreshing it. Refreshing it means deleting its rows
-    first. Worth knowing before renaming something already indexed.
-
-    `authors` stays refused unconditionally. That is a relocation, not a rename:
-    the book moves to a different author directory, leaving the old one possibly
-    empty, and the record ends up somewhere no `(id)` walk from the previous
-    location reaches. Do it in the GUI, which moves files transactionally.
-    """
+    """Set metadata fields on one record via `calibredb set_metadata --field`."""
     reject_html_entities(**fields)
 
     lowered = {k.lower() for k in fields}
     if "authors" in lowered:
-        # STILL ABSOLUTE, and for a different reason than title. Changing authors
-        # moves the book to a DIFFERENT author directory, so the old one may be
-        # left behind empty and the record lands somewhere no `(id)` walk from the
-        # previous location reaches. That is a relocation, not a rename.
         raise WriteBlocked(
             "refusing to set 'authors' — that moves the book to a different author "
             "directory, not just a rename; use the Calibre GUI",
@@ -641,14 +296,14 @@ def set_book_metadata(
     merged_note = None
     for key in [k for k in fields if k.lower() == "identifiers"]:
         before = current_identifiers(book_id)
-        fields[key] = _merge_identifiers(book_id, fields[key])
+        fields[key] = merge_identifiers(book_id, fields[key])
         merged_note = {"before": before, "written": fields[key]}
 
     backup = backup_db(backup_dir)
     args = ["set_metadata", str(book_id)]
     for k, v in fields.items():
         args += ["--field", f"{k}:{v}"]
-    out = {"ok": True, "calibredb": _run(args), "db_backup": backup}
+    out = {"ok": True, "calibredb": run_calibredb(args), "db_backup": backup}
     if merged_note:
         out["identifiers_merged"] = merged_note
     return out

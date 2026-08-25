@@ -1,4 +1,4 @@
-"""The canonical Book record and the queries that build it.
+"""Queries that build Book records from metadata.db.
 
 `formats` carries ABSOLUTE PATHS, not format codes. The two shapes existed in
 different repos — calibre-mcp's get_book returned `data.format` strings while
@@ -9,9 +9,9 @@ its suffix, while a code cannot be turned back into a path without re-querying.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from pathlib import Path
 
+from calibre_core.domain.book import Book, split_field
 from calibre_core.infrastructure.sqlite import connect, library_path
 
 # There is NO `books.publisher` column -- checked against the real Calibre 9.x
@@ -35,42 +35,6 @@ FROM books b
 """
 
 
-@dataclass(frozen=True)
-class Book:
-    id: int
-    title: str
-    authors: tuple[str, ...] = ()
-    tags: tuple[str, ...] = ()
-    formats: tuple[Path, ...] = ()
-    sizes: tuple[int, ...] = ()
-    isbn: str | None = None
-    path: str = ""
-    uuid: str | None = None
-    timestamp: str | None = None
-    pubdate: str | None = None
-    last_modified: str | None = None
-    # Appended rather than filed next to `isbn` where it belongs bibliographically,
-    # because every field here is positional as well as keyword: inserting mid-list
-    # would silently shift `path`/`uuid`/`timestamp` for any caller that builds a
-    # Book positionally, and a wrong-but-plausible uuid breaks deep links quietly.
-    publisher: str | None = None
-    _extra: dict = field(default_factory=dict, repr=False, compare=False)
-
-    @property
-    def authors_str(self) -> str:
-        """Ampersand-joined, matching the house convention and the old SQL."""
-        return " & ".join(self.authors)
-
-    @property
-    def calibre_url(self) -> str | None:
-        """A clickable deep link. Needs the uuid — the numeric id will not do."""
-        return f"calibre://show-book/_hex_-43616c69627265/{self.uuid}" if self.uuid else None
-
-
-def _split(s: str | None, sep: str) -> tuple[str, ...]:
-    return tuple(x.strip() for x in (s or "").split(sep) if x.strip())
-
-
 def _query(db: Path | None, root: Path, book_id: int | None = None) -> list[Book]:
     """The one place a Book is built from rows. `book_id` narrows both queries.
 
@@ -85,8 +49,6 @@ def _query(db: Path | None, root: Path, book_id: int | None = None) -> list[Book
     try:
         rows = con.execute(_BOOKS_SQL + where, args).fetchall()
         fmts: dict[int, list[tuple[Path, int]]] = {}
-        # books.path is needed to build each format's absolute path, so collect
-        # it from the rows above rather than re-querying per format.
         paths = {r[0]: r[2] for r in rows}
         for bid, name, fmt, size in con.execute(
             "SELECT book, name, format, uncompressed_size FROM data"
@@ -107,8 +69,8 @@ def _query(db: Path | None, root: Path, book_id: int | None = None) -> list[Book
             Book(
                 id=bid,
                 title=title or "",
-                authors=_split(authors, "&"),
-                tags=_split(tags, ","),
+                authors=split_field(authors, "&"),
+                tags=split_field(tags, ","),
                 formats=tuple(p for p, _ in pairs),
                 sizes=tuple(s for _, s in pairs),
                 isbn=isbn,
@@ -137,12 +99,7 @@ def load_books(db: Path | None = None, *, root: Path | None = None) -> list[Book
 
 
 def get_book(book_id: int, db: Path | None = None, *, root: Path | None = None) -> Book | None:
-    """One book by id. Queried directly rather than filtering `load_books`.
-
-    The scan was O(library) per call, which is invisible for a one-off lookup and
-    is not for `paths.resolve_path` — the plugin resolves every document open in
-    Skim, and omni-rag's ingest resolves every file in the corpus.
-    """
+    """One book by id. Queried directly rather than filtering `load_books`."""
     return next(iter(_query(db, root or library_path(), book_id)), None)
 
 
@@ -153,12 +110,7 @@ def books_by_tag(tag: str, db: Path | None = None) -> list[Book]:
 
 
 def iter_tags(db: Path | None = None, min_count: int = 1) -> list[tuple[str, int]]:
-    """The live controlled vocabulary, with usage counts, most-used first.
-
-    This IS the vocabulary — there is no hand-maintained list to consult. A copied
-    list drifts in one direction (the library always grows past it) and then reads
-    as authoritative, which is worse than having none.
-    """
+    """The live controlled vocabulary, with usage counts, most-used first."""
     con = connect(db)
     try:
         rows = con.execute(
