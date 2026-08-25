@@ -4,7 +4,9 @@ Every add and metadata change should go through here rather than a bare
 `calibredb` call, because the preconditions are easy to forget and expensive to
 get wrong. The gates are enforced, not documented:
 
-  * the Calibre GUI must be closed  (calibredb corrupts state if it is open)
+  * if the GUI is open, writes route through the content server automatically
+    (requires "enable local write" in Preferences → Sharing → Advanced);
+    if no content server is reachable, the write is refused with setup instructions
   * metadata.db is backed up first  (a rollback is the only undo that exists)
   * duplicates are detected BEFORE the record is created
   * `title` and `authors` are mandatory on add
@@ -100,6 +102,33 @@ def gui_is_open() -> bool:
         subprocess.run(["pgrep", "-x", "calibre"], capture_output=True, check=False).returncode
         == 0
     )
+
+
+def _content_server_url() -> str | None:
+    """Probe for a running Calibre content server with local-write enabled.
+
+    Returns the --with-library URL (e.g. "http://localhost:8080/#Calibre_Library")
+    or None if unreachable / not configured for writes.
+    """
+    import urllib.request
+    import urllib.error
+    for port in (8080, 8181):
+        url = f"http://localhost:{port}"
+        try:
+            with urllib.request.urlopen(url, timeout=2) as resp:
+                if resp.status == 200:
+                    # Probe the library list endpoint
+                    r = subprocess.run(
+                        [calibredb_path(), "list", "--limit", "1",
+                         "--with-library", f"{url}/#-"],
+                        capture_output=True, text=True, check=False, timeout=10,
+                    )
+                    if r.returncode == 0 and r.stdout.strip():
+                        lib = r.stdout.strip().splitlines()[0].strip()
+                        return f"{url}/#{lib}"
+        except (urllib.error.URLError, OSError, subprocess.TimeoutExpired):
+            continue
+    return None
 
 
 _HTML_ENTITIES = ("&amp;", "&lt;", "&gt;", "&quot;", "&#39;", "&apos;", "&nbsp;")
@@ -325,8 +354,20 @@ def check_duplicate(
 # --------------------------------------------------------------------------
 
 def _run(args: list[str]) -> str:
+    lib_target = str(library_path())
+    if gui_is_open():
+        server_url = _content_server_url()
+        if server_url:
+            lib_target = server_url
+        else:
+            raise WriteBlocked(
+                "Calibre GUI is open and no content server with local-write is "
+                "reachable. Either close the GUI, or enable the content server: "
+                "Preferences → Sharing over the net → Advanced → enable local write, "
+                "then Connect/share → Start Content server."
+            )
     r = subprocess.run(
-        [calibredb_path(), *args, "--with-library", str(library_path())],
+        [calibredb_path(), *args, "--with-library", lib_target],
         capture_output=True, text=True, check=False,
     )
     if r.returncode != 0:
@@ -365,8 +406,6 @@ def add_book(
     if not title or not authors:
         raise WriteBlocked("title and authors are mandatory (filename parsing inverts records)")
     reject_html_entities(title=title, authors=authors, tags=tags)
-    if gui_is_open():
-        raise WriteBlocked("Calibre GUI is open — close it before writing")
 
     dup = check_duplicate(staged_path=path, title=title, authors=authors, isbn=isbn)
     if dup["verdict"] == "block" and not force:
@@ -474,8 +513,6 @@ def add_format(
             f"pass force=True only if losing the current {ext} is intended",
             {"book_id": book_id, "format": ext, "existing": existing, "hint": "force=True"},
         )
-    if gui_is_open():
-        raise WriteBlocked("Calibre GUI is open — close it before writing")
 
     backup = backup_db(backup_dir)
     out = _run(["add_format", str(book_id), path])
@@ -518,8 +555,6 @@ def remove_identifier(
     books are British, so the ISBN signal reported them as a guaranteed duplicate
     of each other and refused re-adds.
     """
-    if gui_is_open():
-        raise WriteBlocked("Calibre GUI is open — close it before writing")
     before = current_identifiers(book_id)
     if id_type not in before:
         raise WriteBlocked(
@@ -583,9 +618,6 @@ def set_book_metadata(
     empty, and the record ends up somewhere no `(id)` walk from the previous
     location reaches. Do it in the GUI, which moves files transactionally.
     """
-    if gui_is_open():
-        raise WriteBlocked("Calibre GUI is open — close it before writing")
-
     reject_html_entities(**fields)
 
     lowered = {k.lower() for k in fields}
