@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from rapidfuzz.distance import Indel
 
-from calibre_core.normalize import norm
+from calibre_core.domain.normalize import norm
 
 
 def _sim(a: str, b: str) -> float:

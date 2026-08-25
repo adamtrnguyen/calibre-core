@@ -23,8 +23,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from calibre_core.library import library_path
-from calibre_core.records import Book, get_book
+from calibre_core.infrastructure.sqlite import library_path
+from calibre_core.infrastructure.records import Book, get_book
 
 # Trailing "(123)" in a Calibre "Title (123)" book folder.
 ID_SUFFIX = re.compile(r"\((\d+)\)$")

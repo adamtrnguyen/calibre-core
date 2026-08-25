@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from calibre_core.library import connect, library_path
-from calibre_core.paths import book_id_from_dir
+from calibre_core.infrastructure.sqlite import connect, library_path
+from calibre_core.infrastructure.paths import book_id_from_dir
 
 BOOK_SUFFIXES = (".pdf", ".epub", ".djvu", ".mobi", ".azw3", ".cbz", ".cbr", ".txt")
 EXCLUDED_DIRS = {".caltrash", ".calnotes"}
@@ -50,7 +50,7 @@ def orphan_dirs(db: Path | None = None) -> list[dict]:
 
 def missing_formats(db: Path | None = None) -> list[dict]:
     """Format rows whose file is not on disk — the reverse of an orphan."""
-    from calibre_core.records import load_books
+    from calibre_core.infrastructure.records import load_books
 
     out = []
     for b in load_books(db):

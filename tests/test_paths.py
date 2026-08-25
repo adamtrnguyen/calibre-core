@@ -8,7 +8,7 @@ be an ordinary answer rather than an exception.
 
 from __future__ import annotations
 
-from calibre_core.paths import book_id_from_dir, library_root_for, resolve_path
+from calibre_core.infrastructure.paths import book_id_from_dir, library_root_for, resolve_path
 
 # --------------------------------------------------------------------------
 # the id folder -- the whole of Calibre's path->record mapping

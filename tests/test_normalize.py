@@ -7,7 +7,7 @@ Adam's library. Verified by a read-only differential over 1,091 books.
 
 import unicodedata
 
-from calibre_core.normalize import author_surname, dedup_key, norm
+from calibre_core.domain.normalize import author_surname, dedup_key, norm
 
 
 def test_accents_fold_so_a_us_keyboard_reaches_them():

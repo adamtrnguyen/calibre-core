@@ -48,10 +48,10 @@ import sqlite3
 import subprocess
 import time
 
-from calibre_core.duplicates import dupok_pairs, excused_within, sha256
-from calibre_core.isbn import clean_isbn
-from calibre_core.library import connect, db_path, library_path
-from calibre_core.normalize import author_surname, dedup_key
+from calibre_core.domain.duplicates import dupok_pairs, excused_within, sha256
+from calibre_core.domain.isbn import clean_isbn
+from calibre_core.infrastructure.sqlite import connect, db_path, library_path
+from calibre_core.domain.normalize import author_surname, dedup_key
 
 
 class WriteBlocked(Exception):

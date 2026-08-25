@@ -7,7 +7,7 @@ silently passes on a corrupt ISBN would identify the wrong edition downstream.
 
 import pytest
 
-from calibre_core.isbn import (
+from calibre_core.domain.isbn import (
     clean_isbn,
     hyphenate,
     to_isbn13,

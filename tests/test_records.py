@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from calibre_core.records import books_by_tag, get_book, iter_tags, load_books
+from calibre_core.infrastructure.records import books_by_tag, get_book, iter_tags, load_books
 
 
 def test_formats_are_absolute_paths_not_format_codes(library):

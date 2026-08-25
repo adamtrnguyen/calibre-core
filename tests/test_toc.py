@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from calibre_core.toc import has_outline, inject_outline, sanitize_outline
-from calibre_core.writes import WriteBlocked
+from calibre_core.infrastructure.toc import has_outline, inject_outline, sanitize_outline
+from calibre_core.application.writes import WriteBlocked
 
 pymupdf = pytest.importorskip("pymupdf")
 
@@ -33,7 +33,7 @@ def _pdf(path, pages: int = 6, outline: list | None = None, text: str = "page"):
 def gui_closed(monkeypatch):
     """Every test here must assert against the write path, not the gate. The one
     test that DOES exercise the gate overrides this."""
-    monkeypatch.setattr("calibre_core.toc.gui_is_open", lambda: False)
+    monkeypatch.setattr("calibre_core.infrastructure.toc.gui_is_open", lambda: False)
 
 
 # --------------------------------------------------------------------------
@@ -135,7 +135,7 @@ def test_an_open_gui_raises_rather_than_returning_a_reason(tmp_path, monkeypatch
     every remaining file — a caller looping over 700 books wants to stop, not to
     silently write nothing 700 times.
     """
-    monkeypatch.setattr("calibre_core.toc.gui_is_open", lambda: True)
+    monkeypatch.setattr("calibre_core.infrastructure.toc.gui_is_open", lambda: True)
     p = _pdf(tmp_path / "book.pdf")
     with pytest.raises(WriteBlocked, match="GUI is open"):
         inject_outline(p, [{"level": 1, "title": "C1", "pdf_page": 1}], tmp_path / "bak")
@@ -144,7 +144,7 @@ def test_an_open_gui_raises_rather_than_returning_a_reason(tmp_path, monkeypatch
 def test_the_gate_fires_before_the_file_is_even_opened(tmp_path, monkeypatch):
     """Ordering matters: a missing file must not mask an open GUI, or a batch over
     a stale work list reports 'file missing' and never mentions the real problem."""
-    monkeypatch.setattr("calibre_core.toc.gui_is_open", lambda: True)
+    monkeypatch.setattr("calibre_core.infrastructure.toc.gui_is_open", lambda: True)
     with pytest.raises(WriteBlocked, match="GUI is open"):
         inject_outline(tmp_path / "nope.pdf", [{"level": 1, "title": "C", "pdf_page": 1}], tmp_path)
 

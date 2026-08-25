@@ -12,8 +12,8 @@ import json
 import sqlite3
 from pathlib import Path
 
-from calibre_core.cli import main
-from calibre_core.records import load_books
+from calibre_core.interface.cli import main
+from calibre_core.infrastructure.records import load_books
 
 
 def _run(capsys, argv: list[str]) -> tuple[int, str, str]:
@@ -215,7 +215,7 @@ def test_two_audits_do_not_overwrite_each_other(library, capsys, tmp_path, monke
     library.add(1, "A Book")
     stamps = iter(["20260101-000000", "20260102-000000"])
     monkeypatch.setattr(
-        "calibre_core.cli._stamped",
+        "calibre_core.interface.cli._stamped",
         lambda d, stem: (
             d.mkdir(parents=True, exist_ok=True) or (s := next(stamps))
             and (d / f"{stem}-{s}.json", d / f"{stem}-{s}.md")
@@ -243,7 +243,7 @@ def test_metadata_candidates_reads_an_audit_json_and_writes_a_report(capsys, tmp
         def edition(self, isbn):
             return {"isbn": isbn, "title": "A Book", "authors": ["An Author"]}
 
-    monkeypatch.setattr("calibre_core.openlibrary.OpenLibraryClient", Fake)
+    monkeypatch.setattr("calibre_core.application.openlibrary.OpenLibraryClient", Fake)
     out = _json_out(
         capsys,
         ["--json", "metadata-candidates", str(audit_json), "--out-dir", str(tmp_path / "r")],
@@ -266,7 +266,7 @@ def test_metadata_candidates_progress_goes_to_stderr_not_stdout(capsys, tmp_path
         def __init__(self, timeout): pass
         def edition(self, isbn): return {"isbn": isbn, "error": "http 404"}
 
-    monkeypatch.setattr("calibre_core.openlibrary.OpenLibraryClient", Fake)
+    monkeypatch.setattr("calibre_core.application.openlibrary.OpenLibraryClient", Fake)
     code, out, err = _run(
         capsys,
         ["--json", "metadata-candidates", str(audit_json), "--out-dir", str(tmp_path / "r")],
@@ -288,7 +288,7 @@ def test_every_registered_subcommand_has_a_handler():
     import ast
     import inspect
 
-    from calibre_core import cli
+    from calibre_core.interface import cli
 
     tree = ast.parse(inspect.getsource(cli))
     fn = next(

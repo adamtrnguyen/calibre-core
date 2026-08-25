@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from calibre_core.orphans import missing_formats, orphan_dirs, path_case_drift
+from calibre_core.infrastructure.orphans import missing_formats, orphan_dirs, path_case_drift
 
 # --------------------------------------------------------------------------
 # orphan_dirs -- a directory the catalogue does not know about

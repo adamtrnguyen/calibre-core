@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from calibre_core import audit
-from calibre_core.records import Book, load_books
+from calibre_core.application import audit
+from calibre_core.infrastructure.records import Book, load_books
 
 
 def _book(bid: int = 1, **kw) -> Book:
@@ -91,7 +91,7 @@ def test_a_scan_worker_exception_is_data_not_a_crash(monkeypatch):
 
 
 def test_the_scan_subprocess_reenters_by_module_not_by_file():
-    """`-m calibre_core.audit`, not `__file__`. As a loose script this re-invoked
+    """`-m calibre_core.application.audit`, not `__file__`. As a loose script this re-invoked
     its own path, which stops working the moment the code is installed as a
     package rather than sitting on disk as the file that started the process.
 
@@ -105,7 +105,7 @@ def test_the_scan_subprocess_reenters_by_module_not_by_file():
     literals = [
         n.value for n in ast.walk(fn) if isinstance(n, ast.Constant) and isinstance(n.value, str)
     ]
-    assert "-m" in literals and "calibre_core.audit" in literals
+    assert "-m" in literals and "calibre_core.application.audit" in literals
     names = {n.id for n in ast.walk(fn) if isinstance(n, ast.Name)}
     assert "__file__" not in names
     attrs = {n.attr for n in ast.walk(fn) if isinstance(n, ast.Attribute)}

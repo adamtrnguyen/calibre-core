@@ -30,7 +30,7 @@ SQL, not against owning the gate. Keeping the gate outside meant every caller
 re-implemented its preconditions, and they disagreed.
 """
 
-from calibre_core.duplicates import (
+from calibre_core.domain.duplicates import (
     dupok_pairs,
     excused,
     excused_within,
@@ -39,7 +39,7 @@ from calibre_core.duplicates import (
     size_groups,
     title_groups,
 )
-from calibre_core.isbn import (
+from calibre_core.domain.isbn import (
     clean_isbn,
     hyphenate,
     to_isbn13,
@@ -47,7 +47,7 @@ from calibre_core.isbn import (
     valid_isbn10,
     valid_isbn13,
 )
-from calibre_core.library import (
+from calibre_core.infrastructure.sqlite import (
     DEFAULT_LIBRARY,
     LibraryNotFound,
     SchemaError,
@@ -57,13 +57,13 @@ from calibre_core.library import (
     library_path,
     schema_probe,
 )
-from calibre_core.normalize import CJK, author_surname, dedup_key, norm
-from calibre_core.orphans import missing_formats, orphan_dirs, path_case_drift
-from calibre_core.paths import book_id_from_dir, library_root_for, resolve_path
-from calibre_core.records import Book, books_by_tag, get_book, iter_tags, load_books
-from calibre_core.search import score, search, token_set_ratio
-from calibre_core.toc import has_outline, inject_outline, sanitize_outline
-from calibre_core.writes import (
+from calibre_core.domain.normalize import CJK, author_surname, dedup_key, norm
+from calibre_core.infrastructure.orphans import missing_formats, orphan_dirs, path_case_drift
+from calibre_core.infrastructure.paths import book_id_from_dir, library_root_for, resolve_path
+from calibre_core.infrastructure.records import Book, books_by_tag, get_book, iter_tags, load_books
+from calibre_core.domain.search import score, search, token_set_ratio
+from calibre_core.infrastructure.toc import has_outline, inject_outline, sanitize_outline
+from calibre_core.application.writes import (
     WriteBlocked,
     add_book,
     add_format,
@@ -80,7 +80,7 @@ from calibre_core.writes import (
 __version__ = "0.7.0"
 
 # `audit` and `openlibrary` are deliberately NOT re-exported here, and are
-# reached as `from calibre_core.audit import ...`. They are report TOOLS with
+# reached as `from calibre_core.application.audit import ...`. They are report TOOLS with
 # their own CLI subcommands, not primitives other code composes, and pulling them
 # up would make every `import calibre_core` drag in `urllib.request`,
 # `concurrent.futures` and a network client. The small import surface is a

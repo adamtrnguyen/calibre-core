@@ -15,7 +15,7 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 
-from calibre_core.duplicates import (
+from calibre_core.domain.duplicates import (
     _excused,
     dupok_pairs,
     excused,

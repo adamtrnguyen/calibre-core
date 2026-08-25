@@ -7,7 +7,7 @@ single rapidfuzz scorer reproduced only 6/8 golden result sets and collapsed
 primitive preserves 7/8, losing nothing.
 """
 
-from calibre_core.search import score, search, token_set_ratio
+from calibre_core.domain.search import score, search, token_set_ratio
 
 
 def test_substring_is_a_free_win():
@@ -42,7 +42,7 @@ def test_empty_query_returns_nothing(library):
 def test_ranking_is_best_first_and_deterministic(library):
     for i, t in enumerate(["Perspective Drawing", "Perspective", "Unrelated Cooking"], start=1):
         library.add(i, t)
-    from calibre_core.records import load_books
+    from calibre_core.infrastructure.records import load_books
 
     res = search("perspective", load_books())
     scores = [r["score"] for r in res]
@@ -52,7 +52,7 @@ def test_ranking_is_best_first_and_deterministic(library):
 
 
 def test_margin_drops_the_noisy_tail(library):
-    from calibre_core.records import load_books
+    from calibre_core.infrastructure.records import load_books
 
     library.add(1, "Kirsti Andersen Geometry")
     library.add(2, "Kristin Neff Self Compassion")
@@ -62,7 +62,7 @@ def test_margin_drops_the_noisy_tail(library):
 
 
 def test_field_restriction(library):
-    from calibre_core.records import load_books
+    from calibre_core.infrastructure.records import load_books
 
     library.add(1, "Optics", authors="Eugene Hecht")
     books = load_books()

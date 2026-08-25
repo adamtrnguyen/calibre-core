@@ -27,9 +27,9 @@ from concurrent import futures
 from pathlib import Path
 from typing import Any
 
-from calibre_core.duplicates import title_groups
-from calibre_core.isbn import clean_isbn, valid_isbn
-from calibre_core.records import Book, load_books
+from calibre_core.domain.duplicates import title_groups
+from calibre_core.domain.isbn import clean_isbn, valid_isbn
+from calibre_core.infrastructure.records import Book, load_books
 
 UNKNOWN_AUTHORS = {
     "",
@@ -134,7 +134,7 @@ def scan_pdf_for_isbns(path: Path, pages_each_end: int, timeout: int) -> dict[st
     indefinitely, and there is no in-process timeout for that. A subprocess has
     one, and a crashed worker costs one record.
 
-    Re-entry is `-m calibre_core.audit`, NOT `__file__`. As a script in another
+    Re-entry is `-m calibre_core.application.audit`, NOT `__file__`. As a script in another
     repo this re-invoked its own path, which stops working the moment the code is
     installed as a package (a wheel, a zipimport) rather than sitting on disk as
     the file that started the process.
@@ -142,7 +142,7 @@ def scan_pdf_for_isbns(path: Path, pages_each_end: int, timeout: int) -> dict[st
     cmd = [
         sys.executable,
         "-m",
-        "calibre_core.audit",
+        "calibre_core.application.audit",
         "--scan-one-pdf",
         str(path),
         "--pages-each-end",
@@ -430,14 +430,14 @@ def audit(library: Path, **kw: Any) -> dict[str, Any]:
 
 
 def _worker_main(argv: list[str] | None = None) -> int:
-    """`python -m calibre_core.audit --scan-one-pdf <path>` — the scan subprocess.
+    """`python -m calibre_core.application.audit --scan-one-pdf <path>` — the scan subprocess.
 
     Deliberately minimal and separate from the `calibre-core audit` subcommand:
     this is an internal protocol between `scan_pdf_for_isbns` and its child, one
     JSON object on stdout, and it must not acquire flags or output modes that the
     parent does not send.
     """
-    ap = argparse.ArgumentParser(prog="python -m calibre_core.audit", description=__doc__)
+    ap = argparse.ArgumentParser(prog="python -m calibre_core.application.audit", description=__doc__)
     ap.add_argument("--scan-one-pdf", type=Path, required=True)
     ap.add_argument("--pages-each-end", type=int, default=8)
     args = ap.parse_args(argv)

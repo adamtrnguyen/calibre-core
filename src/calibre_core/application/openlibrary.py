@@ -37,7 +37,7 @@ from concurrent import futures
 from pathlib import Path
 from typing import Any
 
-from calibre_core.normalize import author_surname, norm
+from calibre_core.domain.normalize import author_surname, norm
 
 OPENLIBRARY = "https://openlibrary.org"
 USER_AGENT = "calibre-core-metadata-candidates/1.0"

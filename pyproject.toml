@@ -27,7 +27,7 @@ pdf = ["pymupdf>=1.24"]
 # import Python at all: Obsidian spawns calibre-page-inserter's helper with a bare
 # `python3`, so a command is the only way it can reach a library.
 [project.scripts]
-calibre-core = "calibre_core.cli:main"
+calibre-core = "calibre_core.interface.cli:main"
 
 [dependency-groups]
 # pymupdf is here as well as in the `pdf` extra: the outline-write tests do a real

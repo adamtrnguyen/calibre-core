@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from calibre_core.library import connect, library_path
+from calibre_core.infrastructure.sqlite import connect, library_path
 
 # There is NO `books.publisher` column -- checked against the real Calibre 9.x
 # schema, which is `publishers(id, name, sort, link)` plus

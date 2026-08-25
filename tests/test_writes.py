@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from calibre_core.writes import (
+from calibre_core.application.writes import (
     WriteBlocked,
     _merge_identifiers,
     add_book,
@@ -299,7 +299,7 @@ def test_remove_identifier_is_a_separate_function_from_the_merging_setter(librar
     replaced the whole set; the fix made that path merge, which in turn made
     removal unreachable there — on purpose. This asserts the two are distinct
     entry points so a later refactor cannot quietly fold them together."""
-    import calibre_core.writes as w
+    import calibre_core.application.writes as w
 
     assert w.remove_identifier is not w.set_book_metadata
     assert "id_type" in w.remove_identifier.__code__.co_varnames
@@ -361,7 +361,7 @@ def test_the_old_blanket_refusal_is_gone(library, monkeypatch):
     not what calibredb does with it.
     """
     library.add(1, "A Book")
-    monkeypatch.setattr("calibre_core.writes._run", lambda args: "ok")
+    monkeypatch.setattr("calibre_core.application.writes._run", lambda args: "ok")
     out = set_book_metadata(1, {"title": "Better Title"}, force=True)
     assert out["ok"] is True
 
@@ -369,7 +369,7 @@ def test_the_old_blanket_refusal_is_gone(library, monkeypatch):
 def test_a_title_write_still_backs_up_first(library, monkeypatch):
     """force=True relaxes WHICH field, never the preconditions around it."""
     library.add(1, "A Book")
-    monkeypatch.setattr("calibre_core.writes._run", lambda args: "ok")
+    monkeypatch.setattr("calibre_core.application.writes._run", lambda args: "ok")
     out = set_book_metadata(1, {"title": "Better Title"}, force=True)
     assert Path(out["db_backup"]).exists()
 
@@ -378,7 +378,7 @@ def test_a_title_write_still_refuses_while_the_gui_is_open(library, monkeypatch)
     """The GUI gate is not a field-level rule and force must not reach it —
     calibredb corrupts state if it writes while Calibre is running."""
     library.add(1, "A Book")
-    monkeypatch.setattr("calibre_core.writes.gui_is_open", lambda: True)
+    monkeypatch.setattr("calibre_core.application.writes.gui_is_open", lambda: True)
     with pytest.raises(WriteBlocked, match="GUI is open"):
         set_book_metadata(1, {"title": "Better Title"}, force=True)
 
@@ -387,7 +387,7 @@ def test_other_fields_never_needed_force(library, monkeypatch):
     """Guard against the flag leaking into a general requirement — comments, tags
     and pubdate rename nothing and must stay reachable without it."""
     library.add(1, "A Book")
-    monkeypatch.setattr("calibre_core.writes._run", lambda args: "ok")
+    monkeypatch.setattr("calibre_core.application.writes._run", lambda args: "ok")
     assert set_book_metadata(1, {"comments": "a note", "tags": "x"})["ok"] is True
 
 
@@ -453,7 +453,7 @@ def test_add_book_refuses_entities_before_touching_the_library(library, tmp_path
 
 def test_add_format_refuses_replacing_an_existing_format(library, tmp_path):
     """The real hazard. A CBR-only record gaining a PDF is fine; a PDF over a PDF is loss."""
-    import calibre_core.writes as w
+    import calibre_core.application.writes as w
 
     library.add(1, "Some Comic", fmt="PDF")
     staged = tmp_path / "again.pdf"
@@ -468,7 +468,7 @@ def test_add_format_refuses_replacing_an_existing_format(library, tmp_path):
 def test_add_format_allows_a_NEW_format_type(library, tmp_path, monkeypatch):
     """A CBR-only record gaining a PDF is the whole use case — it must not be refused
     by the replace guard, which keys on the format TYPE, not on the record."""
-    import calibre_core.writes as w
+    import calibre_core.application.writes as w
 
     library.add(1, "Some Comic", fmt="CBR", content=b"Rar!fixture")
     staged = tmp_path / "converted.pdf"
@@ -481,7 +481,7 @@ def test_add_format_allows_a_NEW_format_type(library, tmp_path, monkeypatch):
 
 
 def test_add_format_refuses_unknown_book_id(library, tmp_path):
-    import calibre_core.writes as w
+    import calibre_core.application.writes as w
 
     library.add(1, "Some Book")
     staged = tmp_path / "x.pdf"
@@ -492,7 +492,7 @@ def test_add_format_refuses_unknown_book_id(library, tmp_path):
 
 
 def test_add_format_refuses_missing_and_extensionless(library, tmp_path):
-    import calibre_core.writes as w
+    import calibre_core.application.writes as w
 
     library.add(1, "Some Book")
     with pytest.raises(WriteBlocked):

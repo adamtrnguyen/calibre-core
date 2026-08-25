@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from calibre_core import openlibrary as ol
+from calibre_core.application import openlibrary as ol
 
 
 class FakeClient:

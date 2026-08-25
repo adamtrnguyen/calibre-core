@@ -13,7 +13,7 @@ import sqlite3
 
 import pytest
 
-from calibre_core.library import (
+from calibre_core.infrastructure.sqlite import (
     DEFAULT_LIBRARY,
     LibraryNotFound,
     connect,
