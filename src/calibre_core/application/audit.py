@@ -31,6 +31,7 @@ from calibre_core.domain.duplicates import title_groups
 from calibre_core.domain.isbn import clean_isbn, valid_isbn
 from calibre_core.domain.book import Book
 from calibre_core.infrastructure.records import load_books
+from calibre_core.infrastructure.sqlite import db_for
 
 UNKNOWN_AUTHORS = {
     "",
@@ -246,7 +247,7 @@ def classify(
     # two catalogues: records from one, duplicate groups from the other.
     duplicate_groups = [
         [{"id": b.id, "title": b.title, "authors": b.authors_str} for b in group]
-        for group in title_groups(db=library / "metadata.db")
+        for group in title_groups(db=db_for(library))
     ]
 
     scan_targets = [b for b in books if not record_isbn(b) and pdf_paths(b)]
@@ -427,7 +428,7 @@ def write_markdown(report: dict[str, Any], path: Path) -> None:  # noqa: C901 - 
 
 def audit(library: Path, **kw: Any) -> dict[str, Any]:
     """Load the catalogue and classify it. The one call a consumer needs."""
-    return classify(load_books(db=library / "metadata.db"), library, **kw)
+    return classify(load_books(db=db_for(library)), library, **kw)
 
 
 def _worker_main(argv: list[str] | None = None) -> int:

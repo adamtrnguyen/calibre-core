@@ -72,7 +72,7 @@ def resolve_path(
     Paths are compared RESOLVED ON BOTH SIDES. Callers hand us already-resolved
     paths — Skim reports the physical path of an open document — while
     `library_path()` is unresolved BY CONTRACT, because the library is a symlink
-    into OneDrive. Comparing as-given makes every real lookup miss, which is why
+    to the NAS mount. Comparing as-given makes every real lookup miss, which is why
     the plugin was calling `.resolve()` itself at its own comparison site. The
     library keeps its unresolved form for the returned Book's format paths, since
     that is what `orphans`' `relative_to` and every calibre:// link expect.

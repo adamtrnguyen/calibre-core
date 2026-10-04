@@ -172,3 +172,60 @@ def test_custom_column_id_returns_none_for_an_absent_label(library):
     answer, and `dupok_pairs` depends on being able to ask cheaply."""
     library.add_dupok_column()
     assert custom_column_id("no_such_column") is None
+
+
+
+# --------------------------------------------------------------------------
+# Database location: books on the NAS, metadata.db on local disk
+# (env > config.toml > Calibre's macos-env.txt > library root)
+# --------------------------------------------------------------------------
+
+@pytest.fixture()
+def no_location_files(tmp_path, monkeypatch):
+    """Isolate from the real config.toml / macos-env.txt on the machine running tests."""
+    from calibre_core.infrastructure import sqlite as sq
+
+    monkeypatch.setattr(sq, "CONFIG_FILE", tmp_path / "absent-config.toml")
+    monkeypatch.setattr(sq, "MACOS_ENV_FILE", tmp_path / "absent-macos-env.txt")
+    monkeypatch.delenv("CALIBRE_OVERRIDE_DATABASE_PATH", raising=False)
+    return sq
+
+
+def test_no_override_means_db_at_library_root(library, no_location_files):
+    sq = no_location_files
+    assert sq.override_db_path() is None
+    assert db_path() == library_path() / "metadata.db"
+
+
+def test_override_env_wins_for_any_library(library, no_location_files, tmp_path, monkeypatch):
+    """An override in the environment is what Calibre itself obeys, so we do too."""
+    elsewhere = tmp_path / "local-db" / "metadata.db"
+    monkeypatch.setenv("CALIBRE_OVERRIDE_DATABASE_PATH", str(elsewhere))
+    assert db_path() == elsewhere
+
+
+def test_config_toml_sets_root_and_db(no_location_files, tmp_path, monkeypatch):
+    sq = no_location_files
+    root, db = tmp_path / "nas-books", tmp_path / "local" / "metadata.db"
+    root.mkdir()
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(f'[library]\nroot = "{root}"\ndb = "{db}"\n')
+    monkeypatch.setattr(sq, "CONFIG_FILE", cfg)
+    monkeypatch.delenv("CALIBRE_LIBRARY", raising=False)
+
+    assert library_path() == root
+    assert db_path() == db
+
+
+def test_file_override_never_redirects_another_library(
+    library, no_location_files, tmp_path, monkeypatch
+):
+    """config.toml / macos-env.txt must not send a fixture or export to the real catalogue."""
+    sq = no_location_files
+    env_file = tmp_path / "macos-env.txt"
+    env_file.write_text("CALIBRE_OVERRIDE_DATABASE_PATH=/elsewhere/metadata.db\n")
+    monkeypatch.setattr(sq, "MACOS_ENV_FILE", env_file)
+
+    assert sq.override_db_path() == sq.Path("/elsewhere/metadata.db")
+    assert db_path() == library_path() / "metadata.db"  # fixture library: untouched
+    assert sq.db_for(DEFAULT_LIBRARY) == sq.Path("/elsewhere/metadata.db")

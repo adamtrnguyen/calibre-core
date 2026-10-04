@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import tomllib
 from pathlib import Path
 
 DEFAULT_LIBRARY = Path.home() / "Calibre Library"
@@ -49,22 +50,88 @@ class SchemaError(Exception):
     """metadata.db is present but does not look like the schema we read."""
 
 
+# Where the library and its database live, for these tools. Optional: with no
+# file, the environment / macos-env.txt / defaults below decide.
+#
+#   [library]
+#   root = "~/Calibre Library"                                  # book files
+#   db   = "~/Library/Application Support/CalibreDB/metadata.db"  # local SQLite
+CONFIG_FILE = Path.home() / ".config" / "calibre-core" / "config.toml"
+
+# Calibre reads this file at launch for every binary in calibre.app (GUI, calibredb,
+# calibre-server). It is the fallback for the db location, so that with no
+# config.toml these tools still agree with Calibre about where metadata.db lives.
+MACOS_ENV_FILE = Path.home() / "Library" / "Preferences" / "calibre" / "macos-env.txt"
+OVERRIDE_VAR = "CALIBRE_OVERRIDE_DATABASE_PATH"
+
+
+def _config() -> dict[str, str]:
+    """The [library] table of config.toml, read at CALL time (tests patch CONFIG_FILE)."""
+    if not CONFIG_FILE.exists():
+        return {}
+    with CONFIG_FILE.open("rb") as fh:
+        return tomllib.load(fh).get("library", {})
+
+
+def configured_library() -> Path:
+    """The library these tools are configured for: config.toml `root`, else the default."""
+    root = _config().get("root")
+    return Path(root).expanduser() if root else DEFAULT_LIBRARY
+
+
 def library_path() -> Path:
-    """The library root.
+    """The library root: $CALIBRE_LIBRARY, else config.toml `root`, else the default.
 
-    Reads the environment at CALL time, not import time — that is what makes
-    `monkeypatch.setenv` work in tests, and it is the only injection seam the
-    original code actually honoured.
+    Reads at CALL time, not import time -- that is what makes `monkeypatch.setenv`
+    work in tests, and it is the only injection seam the original code honoured.
 
-    Returned unresolved. The real library is a symlink into OneDrive, and
-    resolving here would change `Path.relative_to` output in orphan scanning; use
-    `library_path().resolve()` explicitly if you need the physical path.
+    Returned unresolved. The real library is a symlink to the NAS
+    (`/Volumes/NFS_Store/Calibre Library`), and resolving here would change
+    `Path.relative_to` output in orphan scanning; use `library_path().resolve()`
+    explicitly if you need the physical path.
     """
-    return Path(os.environ.get("CALIBRE_LIBRARY", str(DEFAULT_LIBRARY)))
+    env = os.environ.get("CALIBRE_LIBRARY")
+    return Path(env) if env else configured_library()
+
+
+def override_db_path() -> Path | None:
+    """Where metadata.db lives when it is NOT at the library root, else None.
+
+    The book files live on the NAS and metadata.db stays on local disk, because
+    SQLite over a network filesystem is unsafe (Calibre FAQ: "Do not put your
+    calibre library on a networked drive"; Calibre's escape hatch is
+    CALIBRE_OVERRIDE_DATABASE_PATH). Order: the process environment, then
+    config.toml `db`, then Calibre's macos-env.txt.
+    """
+    val = os.environ.get(OVERRIDE_VAR) or _config().get("db")
+    if not val and MACOS_ENV_FILE.exists():
+        for line in MACOS_ENV_FILE.read_text().splitlines():
+            key, sep, rest = line.partition("=")
+            if sep and key.strip() == OVERRIDE_VAR:
+                val = rest.strip()
+    return Path(val).expanduser() if val else None
+
+
+def db_for(library: Path) -> Path:
+    """metadata.db for a library root.
+
+    An override in the process environment always wins (Calibre does the same).
+    One from config.toml or macos-env.txt applies to the configured library alone,
+    so a test fixture, a Calibre export or the staged HPC copy -- each carrying
+    its own metadata.db at its root -- is never silently redirected to the real
+    catalogue.
+    """
+    override = override_db_path()
+    if override and (
+        OVERRIDE_VAR in os.environ
+        or library.resolve() == configured_library().resolve()
+    ):
+        return override
+    return library / "metadata.db"
 
 
 def db_path() -> Path:
-    return library_path() / "metadata.db"
+    return db_for(library_path())
 
 
 def connect(db: Path | None = None) -> sqlite3.Connection:

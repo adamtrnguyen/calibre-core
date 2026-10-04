@@ -94,13 +94,42 @@ the record exists, and `title`/`authors` are mandatory on add (without them
 `calibredb add` parses the filename as `Title - Author`, while most sources name
 files `Author - Title`, so the record lands silently inverted).
 
+## Where the library and its database live
+
+Book files and `metadata.db` can live apart: the books on a NAS, the SQLite
+database on local disk. Calibre's FAQ says "Do not put your calibre library on a
+networked drive", and its escape hatch is `CALIBRE_OVERRIDE_DATABASE_PATH`.
+calibre-core resolves both locations in this order:
+
+| | Library root (book files) | `metadata.db` |
+|---|---|---|
+| 1 | `$CALIBRE_LIBRARY` | `$CALIBRE_OVERRIDE_DATABASE_PATH` (applies to any library) |
+| 2 | `~/.config/calibre-core/config.toml` `[library] root` | `config.toml` `[library] db` |
+| 3 | `~/Calibre Library` | Calibre's `~/Library/Preferences/calibre/macos-env.txt` |
+| 4 | | `<library root>/metadata.db` |
+
+Rows 2–3 for the database apply **only to the configured library**, so a test
+fixture, a Calibre export or a staged copy (each with its own `metadata.db` at its
+root) is never redirected to the real catalogue.
+
+```toml
+# ~/.config/calibre-core/config.toml
+[library]
+root = "~/Calibre Library"                                     # symlink to the NAS mount
+db   = "~/Library/Application Support/CalibreDB/metadata.db"   # local disk
+```
+
+Calibre itself reads only `macos-env.txt`; keep its
+`CALIBRE_OVERRIDE_DATABASE_PATH=` line and `config.toml` `db` in agreement.
+
 ## Notes for anyone else
 
 Two behaviours look like bugs and are not:
 
 - `library_path()` returns the path **unresolved**. A library is often a symlink
-  into cloud storage, and resolving it changes `Path.relative_to` output in orphan
-  scanning. Call `.resolve()` yourself where you need the physical path.
+  (to a NAS mount or into cloud storage), and resolving it changes
+  `Path.relative_to` output in orphan scanning. Call `.resolve()` yourself where
+  you need the physical path.
 - Duplicate detection reads sizes from the `data.uncompressed_size` **column**,
   never by stat-ing files, and hashes only a size collision. On a cloud-synced
   library, reading one byte of a dataless placeholder downloads the whole file, so

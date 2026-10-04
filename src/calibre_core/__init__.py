@@ -53,8 +53,10 @@ from calibre_core.infrastructure.sqlite import (
     SchemaError,
     connect,
     custom_column_id,
+    db_for,
     db_path,
     library_path,
+    override_db_path,
     schema_probe,
 )
 from calibre_core.domain.normalize import CJK, author_surname, dedup_key, norm
@@ -79,7 +81,7 @@ from calibre_core.application.writes import (
     set_book_metadata,
 )
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 # `audit` and `openlibrary` are deliberately NOT re-exported here, and are
 # reached as `from calibre_core.application.audit import ...`. They are report TOOLS with
@@ -93,7 +95,8 @@ __version__ = "0.8.0"
 __all__ = [  # noqa: RUF022
     "__version__",
     # library access
-    "DEFAULT_LIBRARY", "library_path", "db_path", "connect", "schema_probe",
+    "DEFAULT_LIBRARY", "library_path", "db_path", "db_for", "override_db_path",
+    "connect", "schema_probe",
     "custom_column_id", "LibraryNotFound", "SchemaError",
     # normalisation
     "CJK", "norm", "dedup_key", "author_surname",
