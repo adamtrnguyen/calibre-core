@@ -34,10 +34,10 @@ import sys
 from pathlib import Path
 
 from calibre_core.application import audit, openlibrary
-from calibre_core.infrastructure.sqlite import LibraryNotFound, SchemaError, library_path
-from calibre_core.infrastructure.paths import resolve_path
 from calibre_core.domain.book import Book
+from calibre_core.infrastructure.paths import resolve_path
 from calibre_core.infrastructure.records import load_books
+from calibre_core.infrastructure.sqlite import LibraryNotFound, SchemaError, library_path
 
 
 def _format_codes(book: Book) -> list[str]:

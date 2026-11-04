@@ -25,11 +25,11 @@ from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
 
-from calibre_core.domain.isbn import clean_isbn
-from calibre_core.infrastructure.sqlite import connect, custom_column_id
-from calibre_core.domain.normalize import author_surname, dedup_key
 from calibre_core.domain.book import Book
+from calibre_core.domain.isbn import clean_isbn
+from calibre_core.domain.normalize import author_surname, dedup_key
 from calibre_core.infrastructure.records import load_books
+from calibre_core.infrastructure.sqlite import connect, custom_column_id
 
 
 def sha256(path: Path | str, chunk: int = 1 << 20) -> str:

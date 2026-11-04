@@ -30,6 +30,14 @@ SQL, not against owning the gate. Keeping the gate outside meant every caller
 re-implemented its preconditions, and they disagreed.
 """
 
+from calibre_core.application.writes import (
+    add_book,
+    add_format,
+    check_duplicate,
+    remove_identifier,
+    set_book_metadata,
+)
+from calibre_core.domain.book import Book
 from calibre_core.domain.duplicates import (
     dupok_pairs,
     excused,
@@ -47,6 +55,18 @@ from calibre_core.domain.isbn import (
     valid_isbn10,
     valid_isbn13,
 )
+from calibre_core.domain.normalize import CJK, author_surname, dedup_key, norm
+from calibre_core.domain.search import score, search, token_set_ratio
+from calibre_core.domain.write_rules import WriteBlocked, reject_html_entities
+from calibre_core.infrastructure.calibredb import (
+    backup_db,
+    calibredb_path,
+    current_identifiers,
+    gui_is_open,
+)
+from calibre_core.infrastructure.orphans import missing_formats, orphan_dirs, path_case_drift
+from calibre_core.infrastructure.paths import book_id_from_dir, library_root_for, resolve_path
+from calibre_core.infrastructure.records import books_by_tag, get_book, iter_tags, load_books
 from calibre_core.infrastructure.sqlite import (
     DEFAULT_LIBRARY,
     LibraryNotFound,
@@ -59,27 +79,7 @@ from calibre_core.infrastructure.sqlite import (
     override_db_path,
     schema_probe,
 )
-from calibre_core.domain.normalize import CJK, author_surname, dedup_key, norm
-from calibre_core.infrastructure.orphans import missing_formats, orphan_dirs, path_case_drift
-from calibre_core.infrastructure.paths import book_id_from_dir, library_root_for, resolve_path
-from calibre_core.domain.book import Book
-from calibre_core.infrastructure.records import books_by_tag, get_book, iter_tags, load_books
-from calibre_core.domain.search import score, search, token_set_ratio
 from calibre_core.infrastructure.toc import has_outline, inject_outline, sanitize_outline
-from calibre_core.domain.write_rules import WriteBlocked, reject_html_entities
-from calibre_core.infrastructure.calibredb import (
-    backup_db,
-    calibredb_path,
-    current_identifiers,
-    gui_is_open,
-)
-from calibre_core.application.writes import (
-    add_book,
-    add_format,
-    check_duplicate,
-    remove_identifier,
-    set_book_metadata,
-)
 
 __version__ = "0.9.1"
 

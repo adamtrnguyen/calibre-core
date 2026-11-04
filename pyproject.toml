@@ -68,12 +68,15 @@ force-exclude = true
 exclude = ["scripts/golden/*"]
 
 [tool.ruff.lint]
-# Same rule set as omni-rag and the rest of the suite: pycodestyle + pyflakes,
-# import order (I), bugbear (B), pyupgrade (UP), and a complexity ceiling (C901).
+# The fleet base rules: pycodestyle (E, W), pyflakes (F), import order (I), bugbear (B),
+# pyupgrade (UP), comprehensions (C4), a complexity ceiling (C901), absolute imports (TID252).
 # UP is checked against target-version py311 — see the requires-python note above:
-# a 3.12+ rewrite suggested here would break omni-rag, which caps at <3.14 but
-# still runs 3.11 on the ARC cluster.
-select = ["E", "F", "I", "B", "UP", "C901"]
+# a 3.12+ rewrite suggested here would break omni-rag, which runs on 3.11.
+select = ["E", "F", "W", "I", "B", "UP", "C4", "C901", "TID252"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+# TID252 bans every relative import: a module names its imports from the package root.
+ban-relative-imports = "all"
 
 [tool.ruff.lint.per-file-ignores]
 # The differential harness imports the FROZEN pre-extraction baseline from

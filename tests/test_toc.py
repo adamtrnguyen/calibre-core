@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from calibre_core.infrastructure.toc import has_outline, inject_outline, sanitize_outline
 from calibre_core.domain.write_rules import WriteBlocked
+from calibre_core.infrastructure.toc import has_outline, inject_outline, sanitize_outline
 
 pymupdf = pytest.importorskip("pymupdf")
 

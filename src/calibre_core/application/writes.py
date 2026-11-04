@@ -17,14 +17,11 @@ from calibre_core.domain.normalize import author_surname, dedup_key
 from calibre_core.domain.write_rules import WriteBlocked, reject_html_entities
 from calibre_core.infrastructure.calibredb import (
     backup_db,
-    calibredb_path,
     current_identifiers,
-    gui_is_open,
     merge_identifiers,
     run_calibredb,
 )
 from calibre_core.infrastructure.sqlite import connect, library_path
-
 
 # --------------------------------------------------------------------------
 # duplicate detection

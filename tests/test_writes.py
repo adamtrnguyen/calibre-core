@@ -23,15 +23,15 @@ from pathlib import Path
 
 import pytest
 
-from calibre_core.domain.normalize import dedup_key
-from calibre_core.domain.write_rules import WriteBlocked, reject_html_entities
-from calibre_core.infrastructure.calibredb import merge_identifiers
 from calibre_core.application.writes import (
     add_book,
     check_duplicate,
     remove_identifier,
     set_book_metadata,
 )
+from calibre_core.domain.normalize import dedup_key
+from calibre_core.domain.write_rules import WriteBlocked, reject_html_entities
+from calibre_core.infrastructure.calibredb import merge_identifiers
 
 # --------------------------------------------------------------------------
 # dedup_key — the normaliser. Its bugs are silent and expensive.

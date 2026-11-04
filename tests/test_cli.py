@@ -12,8 +12,8 @@ import json
 import sqlite3
 from pathlib import Path
 
-from calibre_core.interface.cli import main
 from calibre_core.infrastructure.records import load_books
+from calibre_core.interface.cli import main
 
 
 def _run(capsys, argv: list[str]) -> tuple[int, str, str]:

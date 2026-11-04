@@ -21,13 +21,13 @@ sys.path.insert(0, str(_HERE / "golden"))
 sys.path.insert(0, str(_HERE.parent / "src"))
 
 import pre_extraction_matching as old
-
-from calibre_core import __version__
-from calibre_core import duplicates as newdup
 from calibre_core.normalize import author_surname
 from calibre_core.orphans import orphan_dirs as new_orphans
 from calibre_core.records import load_books as new_load
 from calibre_core.search import search as new_search
+
+from calibre_core import __version__
+from calibre_core import duplicates as newdup
 
 print(f"calibre_core {__version__} vs frozen pre-extraction baseline (950dfde1)\n")
 fail = 0

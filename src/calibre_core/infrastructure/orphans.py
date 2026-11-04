@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from calibre_core.infrastructure.sqlite import connect, library_path
 from calibre_core.infrastructure.paths import book_id_from_dir
+from calibre_core.infrastructure.sqlite import connect, library_path
 
 BOOK_SUFFIXES = (".pdf", ".epub", ".djvu", ".mobi", ".azw3", ".cbz", ".cbr", ".txt")
 EXCLUDED_DIRS = {".caltrash", ".calnotes"}

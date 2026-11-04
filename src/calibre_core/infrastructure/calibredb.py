@@ -16,7 +16,6 @@ from calibre_core.infrastructure.sqlite import (
     library_path,
 )
 
-
 # Where the content server's own settings live. Its `port` line is the truth about
 # where the server listens: Calibre falls back to it when 8080 is taken (here by
 # Obsidian), and a probe of guessed ports then misses a running server and blocks
@@ -143,10 +142,7 @@ def current_identifiers(book_id: int) -> dict[str, str]:
     """The record's identifiers as {type: value}. Read-only."""
     con = connect()
     try:
-        return {
-            t: v
-            for t, v in con.execute("SELECT type, val FROM identifiers WHERE book=?", (book_id,))
-        }
+        return dict(con.execute("SELECT type, val FROM identifiers WHERE book=?", (book_id,)))
     finally:
         con.close()
 
