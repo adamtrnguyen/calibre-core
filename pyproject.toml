@@ -36,12 +36,13 @@ calibre-core = "calibre_core.interface.cli:main"
 # only thing that matters — that a bad save never becomes the original.
 dev = [
     "pytest>=8",
-    "ruff>=0.6",
+    # ruff and ty are pinned EXACTLY, to the fleet versions: a floating linter or a pre-1.0 type
+    # checker turns the gate red with no code change. The ruff pin must equal the pre-commit
+    # hook `rev`. Bump both across the fleet together.
+    "ruff==0.17.2",
     "import-linter>=2.0",
     "pymupdf>=1.24",
-    "ty==0.0.55",  # PINNED: ty is pre-1.0 (0.0.x) — diagnostics change between releases, so an
-                   # unpinned bump can turn `just lint` red with no code change. Bump deliberately.
-                   # Same pin as omni-rag, so the shared package types the same in both.
+    "ty==0.0.88",
     "vulture>=2.14",
     "codespell>=2.4",
 ]
@@ -59,6 +60,12 @@ ignore-words-list = "nd"
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+# Excludes apply even to files a pre-commit hook names explicitly.
+force-exclude = true
+
+[tool.ruff.format]
+# The frozen baseline is compared verbatim against calibre_core; reformatting it would edit it.
+exclude = ["scripts/golden/*"]
 
 [tool.ruff.lint]
 # Same rule set as omni-rag and the rest of the suite: pycodestyle + pyflakes,

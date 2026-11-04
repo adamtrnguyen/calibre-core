@@ -2,29 +2,76 @@
 default:
     @just --list
 
-# static checks: style, types, layering
+# The gate: every check at once, every failure named. Each PID is waited on by itself (a bare
+# `wait` returns only the last job's status); `failed` is a string because macOS bash 3.2 errors
+# on an empty array under `set -u`. The gate never rewrites files: `just fix` is the fixer.
+# Why it is shaped this way: docs/history/2026-11-04-concurrent-qa-gate.md.
+[doc("the gate: every check at once, every failure named")]
+qa:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    names=(lint fmt-check types layers dead spell test)
+    logs=$(mktemp -d "${TMPDIR:-/tmp}/qa.XXXXXX")
+    trap 'rm -rf "$logs"' EXIT
+    echo "== qa: ${#names[@]} checks, concurrent (${names[*]}); output replayed in that order =="
+    pids=()
+    for name in "${names[@]}"; do
+        just "$name" >"$logs/$name.out" 2>&1 &
+        pids+=("$!")
+    done
+    failed=""
+    for i in "${!pids[@]}"; do
+        wait "${pids[$i]}" || failed="$failed ${names[$i]}"
+    done
+    for name in "${names[@]}"; do cat "$logs/$name.out"; echo ""; done
+    if [ -n "$failed" ]; then
+        echo "QA FAILED:$failed"
+        exit 1
+    fi
+    echo "QA passed: ${names[*]}."
+
+[doc("ruff check, no fixes")]
 lint:
+    @echo "== ruff check =="
     uv run ruff check .
+
+[doc("ruff format --check: the tree stays formatted (fix with `just fix`)")]
+fmt-check:
+    @echo "== ruff format --check =="
+    uv run ruff format --check .
+
+[doc("ty type check of src/ (pinned in the dev group)")]
+types:
+    @echo "== ty =="
     uv run ty check src/
+
+[doc("import-linter contracts (.importlinter)")]
+layers:
+    @echo "== import-linter =="
     uv run lint-imports
 
-# auto-fix style. NOT part of `qa`: this repo is not ruff-format-clean yet
-# (25 files would change), so formatting is an explicit choice, never a gate.
-format:
-    uv run ruff check --fix .
-    uv run ruff format .
-
-# anti-sprawl: dead code + typos. tests/ is included because the test names and
-# docstrings here carry the reasoning — a typo in a name is a typo in the record.
-sprawl:
+[doc("vulture dead-code scan")]
+dead:
+    @echo "== vulture =="
     uv run vulture src/ scripts/ --min-confidence 80
+
+# tests/ is included: the test names and docstrings carry the reasoning, so a typo there is a
+# typo in the record.
+[doc("codespell over source, tests and README")]
+spell:
+    @echo "== codespell =="
     uv run codespell src/ scripts/ tests/ README.md
 
-# full gate (mirrors omni-rag): lint + anti-sprawl + tests
-qa: lint sprawl test
-
+[doc("pytest, the whole suite")]
 test:
+    @echo "== pytest =="
     uv run pytest
+
+# Fixers: opt-in, never part of qa.
+[doc("rewrite in place: ruff check --fix, then ruff format")]
+fix:
+    uv run ruff check --fix .
+    uv run ruff format .
 
 # The `pdf` extra path: `toc`'s outline write and `audit`'s ISBN scan import
 # pymupdf inside the function, so a base-install run silently skips them. pymupdf
