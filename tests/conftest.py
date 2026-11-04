@@ -210,8 +210,7 @@ def _gui_closed(monkeypatch, request):
 
     Tests that exercise the gate itself request `gui_open` instead.
     """
-    # Never probe for a REAL content server: with Calibre running, a test that fakes
-    # "GUI open" would otherwise find it and send its write to the live library.
+    # Never probe for a real content server in tests: it serves the live library.
     monkeypatch.setattr("calibre_core.infrastructure.calibredb._content_server_url", lambda: None)
     if "gui_open" in request.fixturenames:
         return

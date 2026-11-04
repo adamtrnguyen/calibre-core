@@ -106,10 +106,8 @@ def run_calibredb(args: list[str]) -> str:
     """Execute a calibredb command, routing through the content server if needed."""
     lib_target = str(library_path())
     if gui_is_open():
-        # The content server writes to ITS library, not to the one the caller named.
-        # Route through it only for the configured library: a fixture, an export or
-        # a staged copy pointed at by CALIBRE_LIBRARY must never reach the live one
-        # (a test that faked "GUI open" sent a title write to the live server).
+        # The content server writes to its own library, so route only the configured library.
+        # See docs/history/2026-11-04-concurrent-qa-gate.md.
         if library_path().resolve() != configured_library().resolve():
             raise WriteBlocked(
                 "Calibre GUI is open and the target is not the configured library — "
