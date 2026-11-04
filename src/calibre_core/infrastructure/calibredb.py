@@ -9,7 +9,12 @@ import time
 from pathlib import Path
 
 from calibre_core.domain.write_rules import WriteBlocked
-from calibre_core.infrastructure.sqlite import connect, db_path, library_path
+from calibre_core.infrastructure.sqlite import (
+    configured_library,
+    connect,
+    db_path,
+    library_path,
+)
 
 
 # Where the content server's own settings live. Its `port` line is the truth about
@@ -100,6 +105,17 @@ def run_calibredb(args: list[str]) -> str:
     """Execute a calibredb command, routing through the content server if needed."""
     lib_target = str(library_path())
     if gui_is_open():
+        # The content server writes to ITS library, not to the one the caller named.
+        # Route through it only for the configured library: a fixture, an export or
+        # a staged copy pointed at by CALIBRE_LIBRARY must never reach the live one
+        # (a test that faked "GUI open" sent a title write to the live server).
+        if library_path().resolve() != configured_library().resolve():
+            raise WriteBlocked(
+                "Calibre GUI is open and the target is not the configured library — "
+                "refusing to route through the content server, which writes to its "
+                "own library",
+                {"target": str(library_path()), "configured": str(configured_library())},
+            )
         server_url = _content_server_url()
         if server_url:
             lib_target = server_url

@@ -495,6 +495,18 @@ def test_content_server_probe_tries_the_configured_port_first(tmp_path, monkeypa
     assert cdb._candidate_ports() == [8080, 8181]
 
 
+def test_gui_open_never_routes_a_non_configured_library_to_the_server(library, monkeypatch):
+    """The content server writes to its own (live) library. A write aimed at any
+    other library — a test fixture, an export — must refuse, even if a server is up."""
+    import calibre_core.infrastructure.calibredb as cdb
+
+    monkeypatch.setattr(cdb, "gui_is_open", lambda: True)
+    monkeypatch.setattr(cdb, "_content_server_url", lambda: "http://localhost:8081/#Live")
+    monkeypatch.setattr(cdb.subprocess, "run", lambda *a, **k: pytest.fail("calibredb was run"))
+    with pytest.raises(WriteBlocked, match="not the configured library"):
+        cdb.run_calibredb(["set_metadata", "1", "--field", "title:x"])
+
+
 def test_content_server_probe_falls_back_to_guesses_without_a_config(tmp_path, monkeypatch):
     import calibre_core.infrastructure.calibredb as cdb
 
