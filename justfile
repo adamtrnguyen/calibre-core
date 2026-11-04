@@ -5,7 +5,7 @@ default:
 # The gate: every check at once, every failure named. Each PID is waited on by itself (a bare
 # `wait` returns only the last job's status); `failed` is a string because macOS bash 3.2 errors
 # on an empty array under `set -u`. The gate never rewrites files: `just fix` is the fixer.
-# Why it is shaped this way: docs/history/2026-11-04-concurrent-qa-gate.md.
+# Why it is shaped this way: docs/history/concurrent-qa-gate.md.
 [doc("the gate: every check at once, every failure named")]
 qa:
     #!/usr/bin/env bash
