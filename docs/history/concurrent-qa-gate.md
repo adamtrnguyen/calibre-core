@@ -52,3 +52,9 @@ library. It recorded 0 attempts across 316 tests. Note that `macos-env.txt` sets
 `CALIBRE_OVERRIDE_DATABASE_PATH` to the live database, and Calibre's own binaries read it. A
 real `calibredb` run from a test would therefore reach the live database whatever
 `--with-library` names. Every write test must mock `run_calibredb` or be refused before it.
+
+## The GUI-check stub (moved from the `_gui_closed` fixture docstring)
+
+The autouse `_gui_closed` fixture was added on 2026-08-13 (commit 5a3dbfe). Before it, the suite
+depended on the developer's Calibre being closed: 287 tests passed with it shut and 6 failed the
+moment it was opened, all with "Calibre GUI is open".

@@ -143,8 +143,8 @@ def inject_outline(
         return {"ok": False, "reason": f"saved copy unreadable: {exc}"}
 
     # The backup is taken only now, once the replacement is known good: copying
-    # first would leave a backup behind for every file that turned out not to
-    # need one.
+    # first would leave a backup behind for every file whose save fails
+    # verification.
     backup_dir = Path(backup_dir)
     backup_dir.mkdir(parents=True, exist_ok=True)
     backup = backup_dir / path.name

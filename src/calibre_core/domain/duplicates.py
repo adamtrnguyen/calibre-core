@@ -100,19 +100,10 @@ _excused = excused
 def excused_within(book_id: int, candidates: Iterable[int], pairs: dict[int, set[int]]) -> bool:
     """Is `book_id` excused against at least one OTHER member of `candidates`?
 
-    The helper both consumers actually wanted, and the reason it is here rather
-    than in each of them: suppression must require the two records be paired with
-    EACH OTHER, not merely both appear somewhere in the `#dupok` column.
-
-    `calibre_mcp.writes` got that wrong by flattening every partner into one
-    global set and suppressing on mere membership. So if any unrelated record
-    named two books as its partners, a genuine duplicate BETWEEN those two books
-    reported `ok` -- the write gate waved through exactly the duplicate it exists
-    to catch. Nothing reported that it had.
-
-    It was then fixed locally, as `writes._excused_within`, and omni-rag's audit
-    grew its own. This function is the shared version those two copies collapse
-    into; the semantics here are the corrected ones, not the flattened ones.
+    Suppression requires the two records be paired with EACH OTHER, not merely
+    both appear somewhere in the `#dupok` column: a flattened partner set lets any
+    record that names two books excuse a genuine duplicate between those two.
+    Every consumer calls this one function rather than keeping its own copy.
 
     `candidates` is the matched set, and `book_id` is excluded from it here rather
     than by the caller: a record trivially "matches itself" in any set built from

@@ -1,7 +1,7 @@
 -- Minimum Calibre schema needed by calibre_mcp, transcribed from a real
 -- metadata.db (Calibre 9.x) via sqlite_master.
 --
--- ⚠ DO NOT build a test library with `calibredb`. Pointed at a hand-made
+-- DO NOT build a test library with `calibredb`. Pointed at a hand-made
 -- library it treats the directory as uninitialised, rewrites the file into the
 -- full 48-table Calibre schema (FTS, tag_browser_* views, triggers) and drops
 -- every row you inserted. That is why this file exists.

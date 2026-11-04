@@ -5,9 +5,8 @@ ISBN, no publisher, no pubdate, a placeholder author, a filename masquerading as
 a title, no tags. Writes nothing to Calibre — the output is a queue for a human
 or for `openlibrary.py` to enrich.
 
-Moved here from omni-rag's `scripts/`, where it was 425 lines of pure Calibre
-logic sitting in a retrieval repo. It imported only `calibre_core` and the
-standard library, which is the tell: nothing about it was about retrieval.
+It is pure Calibre logic (it imports only `calibre_core` and the standard library),
+which is why it lives here and not in a retrieval repo.
 
 `pymupdf` is needed ONLY for `--scan-missing-isbns` and is imported inside the
 worker, so the audit proper runs with the package's base dependencies. Install

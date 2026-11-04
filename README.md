@@ -8,20 +8,10 @@ a CLI, an Obsidian plugin, a RAG ingest pipeline — is an interface over this.
 
 ## Why it exists
 
-The same logic had been reimplemented across 15 files in 4 repos, with **three
-divergent title normalisers**. The differences were silent and expensive:
-
-- One stripped CJK characters, so every Chinese, Japanese and Korean title
-  normalised to the empty string. The callers filtered empty keys, so those books
-  were not mis-grouped — they were **absent** from duplicate detection, with no
-  error anywhere.
-- Search and duplicate-grouping disagreed about accents, because one folded
-  diacritics and the other did not.
-- A duplicate check keyed on title alone, so *Algebra* by Lang and *Algebra* by
-  Artin were the same book.
-
-There was no single answer to "what is a Calibre record, and is it valid". This is
-that answer.
+Every consumer imports this package instead of keeping its own normaliser,
+duplicate check or `metadata.db` reader, so there is one answer to "what is a
+Calibre record, and is it valid". The divergent copies it replaced:
+[docs/history/one-calibre-core.md](docs/history/one-calibre-core.md).
 
 ## Install
 
@@ -30,7 +20,7 @@ that answer.
 dependencies = ["calibre-core"]
 
 [tool.uv.sources]
-calibre-core = { git = "https://github.com/adamtrnguyen/calibre-core", tag = "v0.4.0" }
+calibre-core = { git = "https://github.com/adamtrnguyen/calibre-core", tag = "v0.9.1" }
 ```
 
 `pymupdf` is an optional extra (`calibre-core[pdf]`), needed only by the two
@@ -83,8 +73,7 @@ point.
 
 **Reads are read-only by construction.** `connect()` opens with `?mode=ro` and
 cannot write, so that is a property of this package rather than of whoever writes
-the next call site. Before it existed, `?mode=ro` was copy-pasted at seven sites
-and one of them was a read-write connection used for a `SELECT`.
+the next call site.
 
 **Writes never issue SQL.** They shell out to `calibredb`, because Calibre
 maintains derived state — path layout, search caches, link tables — that direct
@@ -141,17 +130,15 @@ allowlist means a book named by anyone is excused against everyone.
 
 ## Tests
 
-287 tests, and each one names the defect it prevents. The normaliser tests are
-regression locks against real failures, not synthetic cases — `test_normalize.py`
-exists because a test asserting only Chinese passed for months while Korean was
-silently broken.
+Each test names the defect it prevents. Tests build a throwaway library on disk
+and stub the GUI check and the content-server probe, so a running Calibre is
+never reached.
 
 ```console
-$ just qa          # the whole gate: lint + anti-sprawl + tests
+$ just qa          # the gate: lint, fmt-check, types, layers, dead, spell, test, concurrently
 $ just test        # pytest alone
-$ just lint        # ruff, ty (types), lint-imports (no consumer may be imported)
-$ just sprawl      # vulture (dead code) + codespell
-$ just audit       # uv lock --check + pip-audit CVE scan; separate, not in `qa`
+$ just fix         # ruff check --fix, then ruff format (never part of qa)
+$ just audit       # uv lock --check; separate, not in `qa`
 ```
 
 `ty` is pinned to an exact version in the dev group: it is pre-1.0, so an

@@ -1,10 +1,8 @@
 """ISBN cleaning and validation — a thin wrapper over `isbnlib`.
 
-Previously hand-rolled: ~25 lines reimplementing the ISBN-10 and ISBN-13
-checksums. isbnlib does that, plus canonicalisation and hyphenation, and is
-maintained. Kept as a wrapper rather than used directly at call sites so the
-tolerant input handling ("ISBN: 978-1-119-..." with prefix and punctuation) lives
-in one place and callers do not each re-derive it.
+isbnlib owns the checksums, canonicalisation and hyphenation. The wrapper exists so
+the tolerant input handling ("ISBN: 978-1-119-..." with prefix and punctuation)
+lives in one place and callers do not each re-derive it.
 """
 
 from __future__ import annotations

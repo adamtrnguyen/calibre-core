@@ -73,7 +73,7 @@ def author_key(value: str) -> str:
 
 def author_overlap(current: str, candidate: list[str]) -> int:
     # Empty keys are dropped: an unkeyable name must not match another unkeyable
-    # name, which is how two unrelated CJK authors used to score an overlap of 1.
+    # name, or two unrelated CJK authors score an overlap of 1.
     current_keys = {key for a in split_authors(current) if (key := author_key(a))}
     candidate_keys = {key for a in candidate if (key := author_key(a))}
     return len(current_keys & candidate_keys)

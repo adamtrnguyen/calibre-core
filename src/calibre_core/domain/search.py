@@ -8,19 +8,11 @@ so a misremembered spelling returns nothing at all:
 
 Backed by rapidfuzz's C++ `Indel` similarity rather than stdlib difflib.
 
-WHY Indel SPECIFICALLY, and why the surrounding structure is unchanged: swapping
-in any rapidfuzz *scorer* wholesale breaks this search. Measured against 1,091
-real books over 8 golden queries, the best single rapidfuzz scorer reproduced
-only 6/8 result sets, and the flagship case -- `perspektive` finding every
-perspective book -- collapsed from 10 hits to 2. That is because
-`fuzz.token_set_ratio` intersects whole token sets, so a long title dilutes a
-short query, whereas the averaging below lets one well-matched token carry it.
-
-Keeping this structure and swapping only the *primitive* preserves 7/8 exactly;
-the eighth ('geometry of art') merely GAINS one extra hit, losing nothing. Indel
-wins because it is the same longest-common-subsequence family as difflib's ratio.
-Levenshtein was tried and is worse -- it loses a real 'vollmar optik' result --
-and Jaro-Winkler manages only 4/8.
+Only the primitive is rapidfuzz; the token averaging below is ours and must stay.
+A whole rapidfuzz scorer such as `fuzz.token_set_ratio` intersects whole token
+sets, so a long title dilutes a short query, whereas the averaging lets one
+well-matched token carry it. Indel is the same longest-common-subsequence family
+as difflib's ratio. The scorer comparison: docs/history/search-scorer.md.
 """
 
 from __future__ import annotations

@@ -1,24 +1,9 @@
-"""The one title normaliser pair.
+"""The one title normaliser pair. Every consumer imports it; none keeps a copy.
 
-Three divergent implementations existed before this, and the differences were
-silent:
+History of the divergent copies this replaced: docs/history/one-calibre-core.md.
 
-  calibre-mcp `norm`               NFKD + casefold, CJK preserved  -- correct
-  calibre-mcp `duplicate_groups`   .lower(), no NFKD, CJK preserved
-      -> search and dedup disagreed on accents
-  omni-rag `normalized_title`      .lower(), `[^a-z0-9]`, NO CJK
-      -> every CJK title collapsed to '', and because the caller filtered
-         `if key`, those books were dropped from duplicate detection entirely.
-         Not mis-grouped -- absent. Real ids 25, 803, 921, 922 all keyed to ''.
-         Fixed 2026-08-12; omni-rag now mirrors this module.
-
-A fourth copy then turned up that no design doc had named:
-`omni-rag/scripts/calibre_openlibrary_metadata_candidates.py`, matching Open
-Library candidates on `[^a-z0-9]` with no NFKD -- so `Juan M. Durán` keyed to
-the single letter 'n'. Four divergent copies is the argument for this package.
-
-Two functions stay, because they are genuinely different jobs and collapsing
-them changes search results:
+There are two functions because they do different jobs; collapsing them
+changes search results:
 
     'The Geometry of an Art, 2nd Edition'
         norm      -> 'the geometry of an art 2nd edition'   (search reach)
@@ -33,8 +18,8 @@ from __future__ import annotations
 import re
 import unicodedata
 
-# Kana, CJK ext-A, CJK unified, Hangul. Stripping these is the bug described
-# above; every regex here must keep them in the allowed class.
+# Kana, CJK ext-A, CJK unified, Hangul. Stripping these keys every CJK title to '',
+# which drops it from duplicate detection; every regex here keeps them in the class.
 CJK = r"぀-ヿ㐀-䶿一-鿿가-힯"
 
 _ORDINAL = (

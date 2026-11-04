@@ -80,17 +80,9 @@ fix:
 test-pdf:
     uv run --extra pdf pytest
 
-# Lockfile consistency only. CVE scanning was removed 2026-08-13: this is personal
-# tooling over PDFs Adam sources himself, not a service taking untrusted input, so the
-# threat model does not justify the noise. `uv lock --check` stays — it catches a
-# pyproject/uv.lock drift, which IS a real and frequent failure here (bumping the
-# calibre-core tag without re-locking).
-#
-# For the record, the last honest run found: torch 2.11.0 PYSEC-2025-194 (fix 2.13.0)
-# and setuptools 81.0.0 PYSEC-2026-3447 (fix 83.0.0). Neither acted on. If this is ever
-# reinstated, note that pip-audit needs --no-deps --disable-pip (its throwaway resolver
-# venv SIGABRTs in ensurepip on this machine) and that git-URL requirements must be
-# stripped, or it exits 1 on "URL requirements cannot be pinned".
+# Lockfile consistency: catches pyproject/uv.lock drift (a dependency bumped without
+# re-locking). No CVE scan: personal tooling over files Adam sources himself, not a
+# service taking untrusted input. Why, and how to reinstate one: docs/history/cve-scanning.md.
 audit:
     uv lock --check
 

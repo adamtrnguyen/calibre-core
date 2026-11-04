@@ -1,10 +1,7 @@
 """Locating the library and opening it — the single read-only chokepoint.
 
-Every read in every consumer should come through `connect()`. Before this
-existed, `?mode=ro` was copy-pasted at five sites in calibre-mcp and two more in
-omni-rag's UUID resolver, and one script opened the same metadata.db with a bare
-read-write `sqlite3.connect()` for a SELECT. Read-only-by-construction that
-depends on whoever writes the next call site remembering is not a guarantee.
+Every read in every consumer comes through `connect()`, so read-only is a property
+of this module, not of whoever writes the next call site.
 
 `connect()` is READ-ONLY and stays that way -- there is no write connection here
 and there will not be one. The package's writes live in `writes.py` and shell out

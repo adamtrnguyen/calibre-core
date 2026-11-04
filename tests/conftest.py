@@ -203,10 +203,8 @@ def guard_real_library(monkeypatch):
 def _gui_closed(monkeypatch, request):
     """Stub the Calibre-GUI check for every test that doesn't opt out.
 
-    Without this the suite depends on the DEVELOPER's Calibre being closed: 287
-    tests passed with it shut and 6 failed the moment it was opened, all with
-    "Calibre GUI is open". A gate that reads real process state makes a real
-    process a test fixture.
+    The gate reads real process state, so without this stub the developer's
+    running Calibre becomes a test fixture and the suite fails whenever it is open.
 
     Tests that exercise the gate itself request `gui_open` instead.
     """
