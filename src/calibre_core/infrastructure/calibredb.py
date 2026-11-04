@@ -6,10 +6,18 @@ import os
 import shutil
 import subprocess
 import time
+from pathlib import Path
 
 from calibre_core.domain.write_rules import WriteBlocked
 from calibre_core.infrastructure.sqlite import connect, db_path, library_path
 
+
+# Where the content server's own settings live. Its `port` line is the truth about
+# where the server listens: Calibre falls back to it when 8080 is taken (here by
+# Obsidian), and a probe of guessed ports then misses a running server and blocks
+# every write with "no content server reachable".
+SERVER_CONFIG_FILE = Path.home() / "Library" / "Preferences" / "calibre" / "server-config.txt"
+_GUESSED_PORTS = (8080, 8181)
 
 _CALIBREDB_FALLBACKS = (
     "/opt/homebrew/bin/calibredb",
@@ -40,11 +48,29 @@ def gui_is_open() -> bool:
     )
 
 
+def _configured_port() -> int | None:
+    """The `port` from server-config.txt, read at CALL time (tests patch the path)."""
+    if not SERVER_CONFIG_FILE.exists():
+        return None
+    for line in SERVER_CONFIG_FILE.read_text().splitlines():
+        key, _, val = line.strip().partition(" ")
+        if key == "port" and val.strip().isdigit():
+            return int(val.strip())
+    return None
+
+
+def _candidate_ports() -> list[int]:
+    """The configured port first, then the guesses, without repeats."""
+    configured = _configured_port()
+    ports = [configured] if configured else []
+    return ports + [p for p in _GUESSED_PORTS if p != configured]
+
+
 def _content_server_url() -> str | None:
     """Probe for a running Calibre content server with local-write enabled."""
     import urllib.error
     import urllib.request
-    for port in (8080, 8181):
+    for port in _candidate_ports():
         url = f"http://localhost:{port}"
         try:
             with urllib.request.urlopen(url, timeout=2) as resp:

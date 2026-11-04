@@ -480,6 +480,28 @@ def test_add_format_allows_a_NEW_format_type(library, tmp_path, monkeypatch):
     assert "GUI is open" in str(ei.value)
 
 
+def test_content_server_probe_tries_the_configured_port_first(tmp_path, monkeypatch):
+    """Calibre moves its server off 8080 when that port is taken (Obsidian holds it
+    here). The probe guessed 8080/8181 only, missed a server on 8081, and blocked
+    every write with the GUI open even though local write was on."""
+    import calibre_core.infrastructure.calibredb as cdb
+
+    cfg = tmp_path / "server-config.txt"
+    cfg.write_text("# Allow un-authenticated local connections\nlocal_write True\nport 8081")
+    monkeypatch.setattr(cdb, "SERVER_CONFIG_FILE", cfg)
+    assert cdb._candidate_ports() == [8081, 8080, 8181]
+
+    cfg.write_text("local_write True\nport 8080")
+    assert cdb._candidate_ports() == [8080, 8181]
+
+
+def test_content_server_probe_falls_back_to_guesses_without_a_config(tmp_path, monkeypatch):
+    import calibre_core.infrastructure.calibredb as cdb
+
+    monkeypatch.setattr(cdb, "SERVER_CONFIG_FILE", tmp_path / "absent.txt")
+    assert cdb._candidate_ports() == [8080, 8181]
+
+
 def test_add_format_refuses_unknown_book_id(library, tmp_path):
     import calibre_core.application.writes as w
 
