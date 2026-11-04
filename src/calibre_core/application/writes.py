@@ -30,14 +30,13 @@ from calibre_core.infrastructure.sqlite import connect, library_path
 # duplicate detection
 # --------------------------------------------------------------------------
 
+
 def _isbn_signals(con: sqlite3.Connection, isbn: str | None) -> list[dict]:
     if not isbn or not (want := clean_isbn(isbn)):
         return []
     return [
         {"signal": "isbn", "book_id": bid, "detail": f"ISBN {val}"}
-        for bid, val in con.execute(
-            "SELECT book, val FROM identifiers WHERE type='isbn'"
-        )
+        for bid, val in con.execute("SELECT book, val FROM identifiers WHERE type='isbn'")
         if clean_isbn(val) == want
     ]
 
@@ -71,9 +70,7 @@ def _size_signals(rows: list[tuple], staged_path: str | None) -> list[dict]:
     return signals
 
 
-def _title_author_signals(
-    rows: list[tuple], title: str | None, authors: str | None
-) -> list[dict]:
+def _title_author_signals(rows: list[tuple], title: str | None, authors: str | None) -> list[dict]:
     if not title:
         return []
     k, sn = dedup_key(title), author_surname(authors or "")
@@ -86,8 +83,7 @@ def _title_author_signals(
         if dedup_key(btitle) == k and k and author_surname(bauth) == sn:
             seen.add(bid)
             signals.append(
-                {"signal": "title+author", "book_id": bid,
-                 "detail": f"{btitle!r} — {bauth}"}
+                {"signal": "title+author", "book_id": bid, "detail": f"{btitle!r} — {bauth}"}
             )
     return signals
 
@@ -132,8 +128,11 @@ def check_duplicate(
 
     matched = {s["book_id"] for s in signals if s["signal"] == "title+author"}
     hard = [s for s in signals if s["signal"] in ("sha256", "isbn")]
-    soft = [s for s in signals if s["signal"] == "title+author"
-            and not excused_within(s["book_id"], matched, pairs)]
+    soft = [
+        s
+        for s in signals
+        if s["signal"] == "title+author" and not excused_within(s["book_id"], matched, pairs)
+    ]
     maybe = [s for s in signals if s["signal"] == "size"]
     verdict = "block" if hard else ("warn" if soft or maybe else "ok")
     return {"verdict": verdict, "signals": signals}
@@ -142,6 +141,7 @@ def check_duplicate(
 # --------------------------------------------------------------------------
 # writes
 # --------------------------------------------------------------------------
+
 
 def add_book(
     path: str,
@@ -177,17 +177,20 @@ def add_book(
         args += ["--identifier", f"isbn:{isbn}"]
     out = run_calibredb(args)
     new_ids = (
-        [int(n) for n in re.findall(r"\b(\d+)\b", out.split("ids:")[-1])]
-        if "ids:" in out
-        else []
+        [int(n) for n in re.findall(r"\b(\d+)\b", out.split("ids:")[-1])] if "ids:" in out else []
     )
     if not new_ids:
         raise WriteBlocked(
             "calibredb exited 0 but reported no new book id — nothing was added",
             {"path": path, "calibredb_output": out, "db_backup": backup},
         )
-    return {"ok": True, "calibredb": out, "book_ids": new_ids,
-            "duplicate_check": dup, "db_backup": backup}
+    return {
+        "ok": True,
+        "calibredb": out,
+        "book_ids": new_ids,
+        "duplicate_check": dup,
+        "db_backup": backup,
+    }
 
 
 def add_format(
@@ -266,8 +269,14 @@ def remove_identifier(
             f"{id_type!r} survived the write on book {book_id}",
             {"before": before, "after": after, "db_backup": backup},
         )
-    return {"ok": True, "calibredb": out, "removed": {id_type: before[id_type]},
-            "before": before, "after": after, "db_backup": backup}
+    return {
+        "ok": True,
+        "calibredb": out,
+        "removed": {id_type: before[id_type]},
+        "before": before,
+        "after": after,
+        "db_backup": backup,
+    }
 
 
 def set_book_metadata(

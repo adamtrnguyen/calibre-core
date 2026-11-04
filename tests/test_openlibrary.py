@@ -32,6 +32,7 @@ def _edition(title="A Book", authors=("An Author",), **kw) -> dict:
 # title matching
 # --------------------------------------------------------------------------
 
+
 def test_title_similarity_ignores_accents_and_case():
     """It compares NORMALISED titles. Raw comparison scored `Pólya` against
     `Polya` as a mismatch, which is a spelling difference between editions rather
@@ -47,11 +48,13 @@ def test_the_best_of_every_title_form_is_used():
     against the bare title is thrown away by a long `full_title`."""
     row = {"id": 1, "title": "Statistical Rethinking", "authors": "Richard McElreath", "isbn": "x"}
     client = FakeClient(
-        {"x": _edition(
-            title="Statistical Rethinking",
-            full_title="Statistical Rethinking: A Bayesian Course with Examples in R and Stan",
-            authors=["Richard McElreath"],
-        )}
+        {
+            "x": _edition(
+                title="Statistical Rethinking",
+                full_title="Statistical Rethinking: A Bayesian Course with Examples in R and Stan",
+                authors=["Richard McElreath"],
+            )
+        }
     )
     out = ol.enrich(row, client)
     assert out["status"] == "strong-candidate"
@@ -109,6 +112,7 @@ def test_a_lookup_error_is_its_own_status():
 # author overlap
 # --------------------------------------------------------------------------
 
+
 def test_authors_split_on_ampersand_and_on_the_word_and():
     assert ol.split_authors("First Last & Second Person") == ["First Last", "Second Person"]
     assert ol.split_authors("First Last and Second Person") == ["First Last", "Second Person"]
@@ -136,6 +140,7 @@ def test_an_absent_author_on_either_side_is_no_overlap():
 # candidate selection
 # --------------------------------------------------------------------------
 
+
 def test_the_catalogues_own_isbn_wins_over_one_scraped_off_a_page():
     """A value in `identifiers` was entered deliberately; one found by regex on a
     copyright page was not. Both sources can name the same book id, so the
@@ -162,16 +167,22 @@ def test_a_single_scanned_isbn_becomes_a_candidate():
 def test_a_page_listing_several_isbns_is_skipped_by_default():
     """Usually the hardback/paperback/ebook of one work — but sometimes a series
     page advertising OTHER titles, and then picking the first is simply wrong."""
-    report = {"isbn_scan": [{"id": 9, "title": "T", "authors": "A",
-                             "isbns": ["9780262035613", "9780131103627"]}]}
+    report = {
+        "isbn_scan": [
+            {"id": 9, "title": "T", "authors": "A", "isbns": ["9780262035613", "9780131103627"]}
+        ]
+    }
     assert ol.candidate_rows(report) == []
 
 
 def test_include_multi_takes_the_first_and_labels_it_a_guess():
     """The label is the point: the guess stays visible downstream instead of
     looking like a found value."""
-    report = {"isbn_scan": [{"id": 9, "title": "T", "authors": "A",
-                             "isbns": ["9780262035613", "9780131103627"]}]}
+    report = {
+        "isbn_scan": [
+            {"id": 9, "title": "T", "authors": "A", "isbns": ["9780262035613", "9780131103627"]}
+        ]
+    }
     rows = ol.candidate_rows(report, include_multi=True)
     assert rows[0]["source"] == "pdf-scan-multi-isbn-first"
     assert rows[0]["isbn"] == "9780262035613"
@@ -186,6 +197,7 @@ def test_an_empty_report_yields_no_candidates():
 # build — ordering and counts
 # --------------------------------------------------------------------------
 
+
 def test_build_sorts_strong_candidates_first_and_is_stable(monkeypatch):
     """Sorted by (status, id): `lookup-error` < `review-title-author` <
     `strong-candidate` alphabetically, so the sort is explicitly BY NAME and this
@@ -199,8 +211,13 @@ def test_build_sorts_strong_candidates_first_and_is_stable(monkeypatch):
     report = {
         "safe_existing_isbn_lookup": [
             {"id": 2, "title": "Exact Match", "authors": "Ann Author", "isbn": "a", "issues": []},
-            {"id": 1, "title": "Different Book", "authors": "Ann Author",
-             "isbn": "b", "issues": []},
+            {
+                "id": 1,
+                "title": "Different Book",
+                "authors": "Ann Author",
+                "isbn": "b",
+                "issues": [],
+            },
             {"id": 3, "title": "Gone", "authors": "Ann Author", "isbn": "zzz", "issues": []},
         ]
     }
@@ -234,9 +251,11 @@ def test_progress_is_optional(monkeypatch):
     write to a caller's stdout."""
     monkeypatch.setattr(ol, "OpenLibraryClient", lambda timeout: FakeClient({}))
     seen: list[tuple[int, int]] = []
-    report = {"safe_existing_isbn_lookup": [
-        {"id": 1, "title": "T", "authors": "A", "isbn": "x", "issues": []}
-    ]}
+    report = {
+        "safe_existing_isbn_lookup": [
+            {"id": 1, "title": "T", "authors": "A", "isbn": "x", "issues": []}
+        ]
+    }
     ol.build(report, on_progress=lambda i, n: seen.append((i, n)))
     assert seen == [(1, 1)]
     ol.build(report)  # no callback -> no output, no crash
@@ -246,16 +265,22 @@ def test_progress_is_optional(monkeypatch):
 # rendering
 # --------------------------------------------------------------------------
 
+
 def test_markdown_escapes_pipes_so_the_table_keeps_its_shape(tmp_path):
     """A title containing `|` silently adds columns and shifts every value right
     of it into the wrong header."""
     report = {
         "summary": {"input_candidates": 1},
-        "candidates": [{
-            "id": 1, "status": "strong-candidate", "source": "existing-calibre-isbn",
-            "isbn": "9780262035613", "title": "Before | After",
-            "openlibrary": _edition(title="Before | After", authors=["A"]),
-        }],
+        "candidates": [
+            {
+                "id": 1,
+                "status": "strong-candidate",
+                "source": "existing-calibre-isbn",
+                "isbn": "9780262035613",
+                "title": "Before | After",
+                "openlibrary": _edition(title="Before | After", authors=["A"]),
+            }
+        ],
     }
     out = tmp_path / "c.md"
     ol.write_markdown(report, out)
@@ -263,7 +288,7 @@ def test_markdown_escapes_pipes_so_the_table_keeps_its_shape(tmp_path):
     assert r"Before \| After" in row
     # Count DELIMITERS, not `|` characters — an escaped pipe still contains one,
     # which is what makes this bug easy to "verify" wrongly.
-    assert row.replace(r"\|", "").count("|") == 10   # 9 columns -> 10 delimiters
+    assert row.replace(r"\|", "").count("|") == 10  # 9 columns -> 10 delimiters
     header = next(line for line in out.read_text().splitlines() if line.startswith("| ID |"))
     assert header.count("|") == 10, "the row and header must agree on column count"
 
@@ -273,23 +298,31 @@ def test_markdown_handles_a_lookup_error_row_with_no_edition(tmp_path):
     in the renderer has to tolerate that or the report dies on the last step."""
     report = {
         "summary": {"input_candidates": 1},
-        "candidates": [{
-            "id": 1, "status": "lookup-error", "source": "pdf-scan-single-isbn",
-            "isbn": "9780262035613", "title": "A Book",
-            "openlibrary": {"isbn": "9780262035613", "error": "http 404"},
-        }],
+        "candidates": [
+            {
+                "id": 1,
+                "status": "lookup-error",
+                "source": "pdf-scan-single-isbn",
+                "isbn": "9780262035613",
+                "title": "A Book",
+                "openlibrary": {"isbn": "9780262035613", "error": "http 404"},
+            }
+        ],
     }
     out = tmp_path / "c.md"
     ol.write_markdown(report, out)
     assert "lookup-error" in out.read_text()
 
 
-@pytest.mark.parametrize("authors,expected", [
-    ([], ""),
-    (["A"], "A"),
-    (["A", "B", "C"], "A & B & C"),
-    (["A", "B", "C", "D", "E"], "A & B & C & +2"),
-])
+@pytest.mark.parametrize(
+    "authors,expected",
+    [
+        ([], ""),
+        (["A"], "A"),
+        (["A", "B", "C"], "A & B & C"),
+        (["A", "B", "C", "D", "E"], "A & B & C & +2"),
+    ],
+)
 def test_long_author_lists_are_truncated_with_a_count(authors, expected):
     """An Open Library edition can list a dozen contributors, which turns one
     table row into a wrapped paragraph."""
@@ -307,6 +340,7 @@ def test_long_author_lists_are_truncated_with_a_count(authors, expected):
 # empty normaliser result into a false POSITIVE, which is the dangerous
 # direction — it promotes a wrong edition to `strong-candidate`.
 # --------------------------------------------------------------------------
+
 
 def test_two_unrelated_cjk_titles_are_not_a_perfect_match():
     """The sharp end of the CJK bug. A blanket `[^a-z0-9]+` mapped every CJK title

@@ -27,6 +27,7 @@ from calibre_core.infrastructure.sqlite import (
 # the guarantee
 # --------------------------------------------------------------------------
 
+
 def test_connect_refuses_writes(library):
     """The whole reason this function exists. A connection that happens to be
     used only for SELECTs today is not read-only; this one cannot write."""
@@ -58,6 +59,7 @@ def test_connect_raises_library_not_found_when_db_absent(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------
 # the injection seam
 # --------------------------------------------------------------------------
+
 
 def test_library_path_reads_the_environment_at_call_time(tmp_path, monkeypatch):
     """Read at import time this would be un-redirectable, every test would hit
@@ -107,6 +109,7 @@ def test_explicit_db_argument_overrides_the_environment(library, tmp_path, monke
 # --------------------------------------------------------------------------
 # schema_probe -- one place a Calibre upgrade can break loudly
 # --------------------------------------------------------------------------
+
 
 def test_schema_probe_is_empty_on_a_good_schema(library):
     """If this fails, fixtures/schema.sql has drifted from what the code reads
@@ -158,6 +161,7 @@ def test_schema_probe_raises_rather_than_reporting_everything_missing(tmp_path, 
 # custom columns
 # --------------------------------------------------------------------------
 
+
 def test_custom_column_id_is_discovered_not_assumed(library):
     """`#dupok` materialises as `custom_column_<id>` + `books_custom_column_<id>_link`,
     and the id differs per library — it is 2 here and 2 in Adam's, but hardcoding
@@ -174,11 +178,11 @@ def test_custom_column_id_returns_none_for_an_absent_label(library):
     assert custom_column_id("no_such_column") is None
 
 
-
 # --------------------------------------------------------------------------
 # Database location: books on the NAS, metadata.db on local disk
 # (env > config.toml > Calibre's macos-env.txt > library root)
 # --------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def no_location_files(tmp_path, monkeypatch):

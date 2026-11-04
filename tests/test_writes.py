@@ -37,6 +37,7 @@ from calibre_core.application.writes import (
 # dedup_key — the normaliser. Its bugs are silent and expensive.
 # --------------------------------------------------------------------------
 
+
 def test_editions_collapse_to_one_key():
     """Two editions of one work must group, so the pair surfaces for review."""
     assert dedup_key("The Craft of Research (4th Edition)") == dedup_key(
@@ -110,19 +111,22 @@ def test_halfwidth_kana_folds_onto_fullwidth():
 # check_duplicate — verdict tiers
 # --------------------------------------------------------------------------
 
+
 def test_identical_file_blocks(library):
     """sha256 match is a hard stop: no judgement is required."""
     staged = library.add(1, "Applied Photographic Optics: Lenses", authors="Sidney F. Ray")
-    r = check_duplicate(staged_path=str(staged), title="Applied Photographic Optics",
-                        authors="Sidney F. Ray")
+    r = check_duplicate(
+        staged_path=str(staged), title="Applied Photographic Optics", authors="Sidney F. Ray"
+    )
     assert r["verdict"] == "block"
     assert any(s["signal"] == "sha256" for s in r["signals"])
 
 
 def test_same_isbn_blocks(library):
     library.add(1, "Some Book", authors="A Writer", isbn="9781119744825")
-    r = check_duplicate(title="Totally Different Title", authors="Other Person",
-                        isbn="978-1-119-74482-5")
+    r = check_duplicate(
+        title="Totally Different Title", authors="Other Person", isbn="978-1-119-74482-5"
+    )
     assert r["verdict"] == "block"
     assert any(s["signal"] == "isbn" for s in r["signals"])
 
@@ -170,6 +174,7 @@ def test_different_author_same_title_does_not_block(library):
 # set_book_metadata — refusals that prevent unrecoverable damage
 # --------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("field", ["title", "authors", "Title", "AUTHORS"])
 def test_rename_fields_are_refused_by_default(library, field):
     """Neither is writable without asking for it, and the check is case-insensitive.
@@ -198,6 +203,7 @@ def test_protected_field_refused_even_alongside_a_safe_one(library):
 # Zotero facade item, so its citations and zotero:// deep links -- while setting
 # an ISBN. Nothing in calibredb's output announced the loss.
 # --------------------------------------------------------------------------
+
 
 def test_setting_one_identifier_preserves_the_others(library):
     """The regression that cost book 256 its Zotero link."""
@@ -234,6 +240,7 @@ def test_merge_ignores_malformed_pairs(library):
 # calibredb is reached are exercisable here.
 # --------------------------------------------------------------------------
 
+
 def test_extensionless_staged_file_is_refused(tmp_path):
     """Given no extension calibredb exits 0, prints nothing, and adds nothing.
     Caught for real: a download saved as `/tmp/dl-<md5>` returned ok=True with
@@ -260,6 +267,7 @@ def test_add_still_demands_title_and_authors(tmp_path):
 # --------------------------------------------------------------------------
 # the fixture itself — if this drifts, every test above is meaningless
 # --------------------------------------------------------------------------
+
 
 def test_fixture_writes_both_db_row_and_file(library):
     """Half a fixture silently exercises half the code: find_orphans walks the
@@ -330,6 +338,7 @@ def test_dupok_does_not_excuse_a_pair_against_the_whole_library(library):
 # --------------------------------------------------------------------------
 # title vs authors — the blanket refusal was wrong, and they are not equivalent
 # --------------------------------------------------------------------------
+
 
 def test_authors_is_refused_even_with_force(library):
     """A relocation, not a rename: the book moves to a DIFFERENT author directory,
@@ -409,8 +418,13 @@ def test_the_incident_value_is_refused():
 @pytest.mark.parametrize(
     "value",
     [
-        "A &amp; B", "A &lt; B", "A &gt; B", 'say &quot;hi&quot;',
-        "it&#39;s", "it&apos;s", "a&nbsp;b",
+        "A &amp; B",
+        "A &lt; B",
+        "A &gt; B",
+        "say &quot;hi&quot;",
+        "it&#39;s",
+        "it&apos;s",
+        "a&nbsp;b",
     ],
 )
 def test_every_covered_entity_is_refused(value):
@@ -421,8 +435,9 @@ def test_every_covered_entity_is_refused(value):
 def test_literal_ampersand_is_the_correct_form_and_passes():
     # This is what the caller SHOULD send, and it must not be mangled or refused:
     # calibredb splits it into two real authors, which is the intent.
-    reject_html_entities(authors="Rudolf von Laban & Lisa Ullmann",
-                         title="Cause & Effect", tags="art,gesture")
+    reject_html_entities(
+        authors="Rudolf von Laban & Lisa Ullmann", title="Cause & Effect", tags="art,gesture"
+    )
 
 
 def test_non_string_values_pass_through():

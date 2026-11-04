@@ -32,6 +32,7 @@ def _json_out(capsys, argv: list[str]):
 # books -- what the plugin's picker is built from
 # --------------------------------------------------------------------------
 
+
 def test_books_carries_the_fields_the_plugin_consumes(library, capsys):
     library.add(1, "A Book", authors="A Writer")
     (row,) = _json_out(capsys, ["--json", "books"])
@@ -96,6 +97,7 @@ def test_books_reports_every_record_the_library_holds(library, capsys):
 # resolve -- path -> record, batched
 # --------------------------------------------------------------------------
 
+
 def test_resolve_pairs_each_path_with_its_record(library, capsys):
     staged = library.add(42, "Resolvable", authors="A Writer")
     (entry,) = _json_out(capsys, ["--json", "resolve", str(staged)])
@@ -135,6 +137,7 @@ def test_resolve_keeps_argument_order_across_a_batch(library, tmp_path, capsys):
 # argument handling
 # --------------------------------------------------------------------------
 
+
 def test_json_is_honoured_after_the_subcommand_too(library, capsys):
     """An argparse trap with teeth: a subparser writes its own defaults into the
     same namespace, so `--json` declared on the child with `default=False` would
@@ -144,8 +147,9 @@ def test_json_is_honoured_after_the_subcommand_too(library, capsys):
     assert _json_out(capsys, ["books", "--json"]) == _json_out(capsys, ["--json", "books"])
 
 
-def test_library_argument_overrides_the_environment(tmp_path, library_at, guard_real_library,
-                                                    capsys):
+def test_library_argument_overrides_the_environment(
+    tmp_path, library_at, guard_real_library, capsys
+):
     """The plugin has its own library setting, so `--library` has to win over
     whatever `CALIBRE_LIBRARY` says — here it says a path that does not exist."""
     other = library_at(tmp_path / "Elsewhere")
@@ -176,6 +180,7 @@ def test_human_output_needs_no_json_flag(library, capsys):
 # --------------------------------------------------------------------------
 # audit / metadata-candidates -- the two tools that moved in from omni-rag
 # --------------------------------------------------------------------------
+
 
 def test_audit_writes_both_report_files_and_prints_where(library, capsys, tmp_path):
     """The stdout summary carries the PATHS. A report whose location you have to
@@ -217,7 +222,8 @@ def test_two_audits_do_not_overwrite_each_other(library, capsys, tmp_path, monke
     monkeypatch.setattr(
         "calibre_core.interface.cli._stamped",
         lambda d, stem: (
-            d.mkdir(parents=True, exist_ok=True) or (s := next(stamps))
+            d.mkdir(parents=True, exist_ok=True)
+            or (s := next(stamps))
             and (d / f"{stem}-{s}.json", d / f"{stem}-{s}.md")
         ),
     )
@@ -231,15 +237,26 @@ def test_metadata_candidates_reads_an_audit_json_and_writes_a_report(capsys, tmp
     """The two commands compose through a FILE, so the expensive audit is run once
     and enriched as often as needed."""
     audit_json = tmp_path / "audit.json"
-    audit_json.write_text(json.dumps({
-        "safe_existing_isbn_lookup": [
-            {"id": 1, "title": "A Book", "authors": "An Author",
-             "isbn": "9780262035613", "issues": ["missing-publisher"]}
-        ]
-    }))
+    audit_json.write_text(
+        json.dumps(
+            {
+                "safe_existing_isbn_lookup": [
+                    {
+                        "id": 1,
+                        "title": "A Book",
+                        "authors": "An Author",
+                        "isbn": "9780262035613",
+                        "issues": ["missing-publisher"],
+                    }
+                ]
+            }
+        )
+    )
 
     class Fake:
-        def __init__(self, timeout): pass
+        def __init__(self, timeout):
+            pass
+
         def edition(self, isbn):
             return {"isbn": isbn, "title": "A Book", "authors": ["An Author"]}
 
@@ -256,15 +273,22 @@ def test_metadata_candidates_reads_an_audit_json_and_writes_a_report(capsys, tmp
 def test_metadata_candidates_progress_goes_to_stderr_not_stdout(capsys, tmp_path, monkeypatch):
     """`--json | jq` must not be fed counters."""
     audit_json = tmp_path / "audit.json"
-    audit_json.write_text(json.dumps({
-        "safe_existing_isbn_lookup": [
-            {"id": 1, "title": "T", "authors": "A", "isbn": "9780262035613", "issues": []}
-        ]
-    }))
+    audit_json.write_text(
+        json.dumps(
+            {
+                "safe_existing_isbn_lookup": [
+                    {"id": 1, "title": "T", "authors": "A", "isbn": "9780262035613", "issues": []}
+                ]
+            }
+        )
+    )
 
     class Fake:
-        def __init__(self, timeout): pass
-        def edition(self, isbn): return {"isbn": isbn, "error": "http 404"}
+        def __init__(self, timeout):
+            pass
+
+        def edition(self, isbn):
+            return {"isbn": isbn, "error": "http 404"}
 
     monkeypatch.setattr("calibre_core.application.openlibrary.OpenLibraryClient", Fake)
     code, out, err = _run(
@@ -272,7 +296,7 @@ def test_metadata_candidates_progress_goes_to_stderr_not_stdout(capsys, tmp_path
         ["--json", "metadata-candidates", str(audit_json), "--out-dir", str(tmp_path / "r")],
     )
     assert code == 0
-    json.loads(out)              # stdout is parseable JSON and nothing else
+    json.loads(out)  # stdout is parseable JSON and nothing else
     assert "lookup 1/1" in err
 
 
@@ -291,9 +315,7 @@ def test_every_registered_subcommand_has_a_handler():
     from calibre_core.interface import cli
 
     tree = ast.parse(inspect.getsource(cli))
-    fn = next(
-        n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "main"
-    )
+    fn = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "main")
     registered = {
         node.args[0].value
         for node in ast.walk(fn)

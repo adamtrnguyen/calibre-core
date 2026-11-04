@@ -439,7 +439,9 @@ def _worker_main(argv: list[str] | None = None) -> int:
     JSON object on stdout, and it must not acquire flags or output modes that the
     parent does not send.
     """
-    ap = argparse.ArgumentParser(prog="python -m calibre_core.application.audit", description=__doc__)
+    ap = argparse.ArgumentParser(
+        prog="python -m calibre_core.application.audit", description=__doc__
+    )
     ap.add_argument("--scan-one-pdf", type=Path, required=True)
     ap.add_argument("--pages-each-end", type=int, default=8)
     args = ap.parse_args(argv)

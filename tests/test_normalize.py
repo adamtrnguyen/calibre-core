@@ -74,8 +74,9 @@ def test_ordinal_kept_when_not_before_edition():
 
 def test_subtitle_kept_so_series_volumes_stay_apart():
     """Stripping after ':' collapsed 9 Morpho volumes into one group."""
-    keys = {dedup_key(f"Morpho: {p}") for p in
-            ("Simplified Forms", "Hands and Feet", "Muscled Bodies")}
+    keys = {
+        dedup_key(f"Morpho: {p}") for p in ("Simplified Forms", "Hands and Feet", "Muscled Bodies")
+    }
     assert len(keys) == 3
 
 

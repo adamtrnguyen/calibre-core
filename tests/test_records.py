@@ -62,6 +62,7 @@ def test_load_books_returns_every_book(library):
 # publisher -- the field whose absence kept a consumer on `calibredb list`
 # --------------------------------------------------------------------------
 
+
 def test_publisher_is_read_from_the_link_table(library):
     """The gap that blocked omni-rag's metadata audit. `missing-publisher` is its
     second-biggest finding (641 of 1122 real records), and because `Book` had no
@@ -95,8 +96,7 @@ def test_publisher_does_not_multiply_rows_like_a_fan_out_join(library):
     but the same mistake that a naive authors/formats join makes (multiplied rows)
     would show up here as a duplicated Book. Asserted with tags and two authors
     present, which are the real fan-outs."""
-    library.add(1, "Fanned", authors="A Writer & B Writer", tags="one,two",
-                publisher="MIT Press")
+    library.add(1, "Fanned", authors="A Writer & B Writer", tags="one,two", publisher="MIT Press")
     books = load_books()
     assert len(books) == 1
     assert books[0].publisher == "MIT Press"

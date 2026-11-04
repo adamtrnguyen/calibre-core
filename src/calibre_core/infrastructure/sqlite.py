@@ -123,8 +123,7 @@ def db_for(library: Path) -> Path:
     """
     override = override_db_path()
     if override and (
-        OVERRIDE_VAR in os.environ
-        or library.resolve() == configured_library().resolve()
+        OVERRIDE_VAR in os.environ or library.resolve() == configured_library().resolve()
     ):
         return override
     return library / "metadata.db"
@@ -151,9 +150,7 @@ def schema_probe(db: Path | None = None) -> dict[str, list[str]]:
     missing: dict[str, list[str]] = {}
     con = connect(db)
     try:
-        present = {
-            r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        }
+        present = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         for table, cols in REQUIRED_SCHEMA.items():
             if table not in present:
                 missing[table] = ["<table absent>"]
@@ -175,9 +172,7 @@ def custom_column_id(label: str, db: Path | None = None) -> int | None:
     """
     con = connect(db)
     try:
-        row = con.execute(
-            "SELECT id FROM custom_columns WHERE label = ?", (label,)
-        ).fetchone()
+        row = con.execute("SELECT id FROM custom_columns WHERE label = ?", (label,)).fetchone()
         return row[0] if row else None
     finally:
         con.close()

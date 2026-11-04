@@ -27,6 +27,7 @@ def _book(bid: int = 1, **kw) -> Book:
 # the regression that made --scan-missing-isbns unusable
 # --------------------------------------------------------------------------
 
+
 def test_progress_reads_book_attributes_not_subscripts(capsys, monkeypatch):
     """`Book` is a frozen dataclass with no `__getitem__`.
 
@@ -60,7 +61,10 @@ def test_progress_can_be_silenced(capsys, monkeypatch):
     )
     audit.run_pdf_scans(
         [(_book(7), Path("/tmp/x.pdf"))],
-        pages_each_end=2, scan_timeout=5, scan_workers=1, progress_every=0,
+        pages_each_end=2,
+        scan_timeout=5,
+        scan_workers=1,
+        progress_every=0,
     )
     assert capsys.readouterr().err == ""
 
@@ -80,13 +84,17 @@ def test_scan_results_come_back_in_the_order_given(monkeypatch):
 
 def test_a_scan_worker_exception_is_data_not_a_crash(monkeypatch):
     """One hostile PDF must cost one record, not the run."""
+
     def boom(p, pages, timeout):
         raise OSError("device not configured")
 
     monkeypatch.setattr(audit, "scan_pdf_for_isbns", boom)
     out = audit.run_pdf_scans(
         [(_book(5), Path("/tmp/bad.pdf"))],
-        pages_each_end=2, scan_timeout=5, scan_workers=1, progress_every=0,
+        pages_each_end=2,
+        scan_timeout=5,
+        scan_workers=1,
+        progress_every=0,
     )
     assert out[0]["error"] == "OSError: device not configured"
 
@@ -100,7 +108,8 @@ def test_the_scan_subprocess_reenters_by_module_not_by_file():
     """
     tree = ast.parse(Path(audit.__file__).read_text())
     fn = next(
-        n for n in ast.walk(tree)
+        n
+        for n in ast.walk(tree)
         if isinstance(n, ast.FunctionDef) and n.name == "scan_pdf_for_isbns"
     )
     literals = [
@@ -117,6 +126,7 @@ def test_the_scan_subprocess_reenters_by_module_not_by_file():
 # classification rules
 # --------------------------------------------------------------------------
 
+
 def test_calibres_zero_year_counts_as_a_missing_pubdate():
     """Calibre stores "no date" as year 0101, not NULL. An emptiness test alone
     reports every undated book as dated, which empties the queue this feeds."""
@@ -125,30 +135,36 @@ def test_calibres_zero_year_counts_as_a_missing_pubdate():
     assert audit.missing_pubdate(_book(pubdate="1998-04-01T00:00:00+00:00")) is False
 
 
-@pytest.mark.parametrize("authors,bad", [
-    (("Unknown",), True),
-    (("unknown author",), True),
-    (("Administrator",), True),
-    (("Administrateur",), True),   # Calibre's French default
-    (("calibre",), True),
-    ((), True),                    # authorless -> authors_str is ""
-    (("Donald E. Knuth",), False),
-])
+@pytest.mark.parametrize(
+    "authors,bad",
+    [
+        (("Unknown",), True),
+        (("unknown author",), True),
+        (("Administrator",), True),
+        (("Administrateur",), True),  # Calibre's French default
+        (("calibre",), True),
+        ((), True),  # authorless -> authors_str is ""
+        (("Donald E. Knuth",), False),
+    ],
+)
 def test_placeholder_authors_are_flagged(authors, bad):
     assert audit.bad_author(_book(authors=authors)) is bad
 
 
-@pytest.mark.parametrize("title,junk", [
-    ("Microsoft Word - chapter3.doc", True),   # a Word export, not a title
-    ("Something.pdf", True),                   # the filename leaked into the field
-    ("Book.epub", True),
-    ("B00KX7T4M2 Some Book", True),            # an Amazon ASIN
-    ("ebok 2003", True),
-    ("", True),
-    ("   ", True),
-    ("Statistical Rethinking", False),
-    ("The C Programming Language", False),
-])
+@pytest.mark.parametrize(
+    "title,junk",
+    [
+        ("Microsoft Word - chapter3.doc", True),  # a Word export, not a title
+        ("Something.pdf", True),  # the filename leaked into the field
+        ("Book.epub", True),
+        ("B00KX7T4M2 Some Book", True),  # an Amazon ASIN
+        ("ebok 2003", True),
+        ("", True),
+        ("   ", True),
+        ("Statistical Rethinking", False),
+        ("The C Programming Language", False),
+    ],
+)
 def test_filename_shaped_titles_are_flagged(title, junk):
     assert audit.junk_title(_book(title=title)) is junk
 
@@ -158,13 +174,14 @@ def test_a_valid_isbn_is_kept_and_an_invalid_one_is_not():
     reported as missing rather than looked up — a lookup on a wrong-but-plausible
     ISBN returns a real edition of the WRONG book."""
     assert audit.record_isbn(_book(isbn="9780262035613")) == "9780262035613"
-    assert audit.record_isbn(_book(isbn="9780262035610")) == ""   # last digit wrong
+    assert audit.record_isbn(_book(isbn="9780262035610")) == ""  # last digit wrong
     assert audit.record_isbn(_book(isbn=None)) == ""
 
 
 # --------------------------------------------------------------------------
 # ISBN extraction from page text
 # --------------------------------------------------------------------------
+
 
 def test_a_labelled_isbn_is_found_including_the_isbn_10_form():
     """The regex leaves the label IN the match on purpose — `clean_isbn` strips
@@ -205,9 +222,16 @@ def test_a_missing_pymupdf_is_reported_per_file_not_raised(monkeypatch, tmp_path
 # the report, over a real library
 # --------------------------------------------------------------------------
 
+
 def test_audit_over_a_library_classifies_every_record(library):
-    library.add(1, "Good Book", authors="Real Author", tags="math", isbn="9780262035613",
-                publisher="MIT Press")
+    library.add(
+        1,
+        "Good Book",
+        authors="Real Author",
+        tags="math",
+        isbn="9780262035613",
+        publisher="MIT Press",
+    )
     library.add(2, "Microsoft Word - draft.doc", authors="Unknown")
     report = audit.audit(library.root)
 
@@ -229,7 +253,7 @@ def test_duplicate_groups_come_from_the_library_under_audit(library, library_at,
     list.
     """
     library.add(1, "Craft", authors="Ann Author")
-    library.add(2, "Craft", authors="Ann Author")   # a real duplicate, in $CALIBRE_LIBRARY
+    library.add(2, "Craft", authors="Ann Author")  # a real duplicate, in $CALIBRE_LIBRARY
 
     other = library_at(tmp_path / "Elsewhere")
     other.add(1, "Only One Book", authors="Bee Bee")

@@ -14,6 +14,7 @@ from calibre_core.infrastructure.paths import book_id_from_dir, library_root_for
 # the id folder -- the whole of Calibre's path->record mapping
 # --------------------------------------------------------------------------
 
+
 def test_book_id_comes_from_the_folder_not_the_filename():
     """Calibre truncates the title in the FILENAME at ~41 chars, which merges books
     sharing a prefix (both Rockhe Kim "Line Drawing Technique" volumes collapsed
@@ -60,6 +61,7 @@ def test_the_record_is_whole_not_just_an_id(library):
 # the symlink case -- a resolved path against an unresolved library
 # --------------------------------------------------------------------------
 
+
 def test_a_resolved_path_matches_an_unresolved_library(tmp_path, library_at, monkeypatch):
     """The real shape on this Mac: `~/Calibre Library` is a symlink into OneDrive,
     `library_path()` returns it UNRESOLVED by contract, and Skim reports the
@@ -80,9 +82,7 @@ def test_a_resolved_path_matches_an_unresolved_library(tmp_path, library_at, mon
     assert resolve_path(through_link).id == 3  # and the unresolved form still works
 
 
-def test_the_returned_formats_stay_under_the_unresolved_library(
-    tmp_path, library_at, monkeypatch
-):
+def test_the_returned_formats_stay_under_the_unresolved_library(tmp_path, library_at, monkeypatch):
     """Only the COMPARISON resolves. The record's format paths keep the library's
     unresolved form, because that is what `orphans`' `relative_to` and every
     calibre:// deep link are built against."""
@@ -99,6 +99,7 @@ def test_the_returned_formats_stay_under_the_unresolved_library(
 # --------------------------------------------------------------------------
 # every flavour of "not a book in this library" -> None, never an exception
 # --------------------------------------------------------------------------
+
 
 def test_a_path_outside_the_library_is_none_not_an_exception(library, tmp_path):
     """calibre-page-inserter skips the foreign PDFs open alongside library books in
@@ -122,9 +123,7 @@ def test_an_id_folder_outside_the_library_does_not_resolve_by_coincidence(librar
     assert resolve_path(lookalike) is None
 
 
-def test_a_sibling_directory_sharing_the_librarys_name_prefix_does_not_resolve(
-    library, tmp_path
-):
+def test_a_sibling_directory_sharing_the_librarys_name_prefix_does_not_resolve(library, tmp_path):
     """Containment is a path-ancestor test, not a string prefix. `<tmp>/Calibre
     Library Backup/…` starts with `<tmp>/Calibre Library`, so a `startswith`
     implementation resolves books out of a backup, an export, or a second library
@@ -153,6 +152,7 @@ def test_an_orphan_directory_resolves_to_none(library):
 # --------------------------------------------------------------------------
 # discover_root -- omni-rag's case, which library_path() cannot serve
 # --------------------------------------------------------------------------
+
 
 def test_library_root_for_finds_the_nearest_metadata_db(library):
     assert library_root_for(library.add(1, "A Book")) == library.root

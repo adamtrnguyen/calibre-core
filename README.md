@@ -45,8 +45,8 @@ from calibre_core import load_books, dedup_key, title_groups, orphan_dirs
 for b in load_books():
     print(b.id, b.title, b.calibre_url)
 
-title_groups()      # duplicate candidates: normalised title + first-author surname
-orphan_dirs()       # directories on disk with no row in metadata.db
+title_groups()  # duplicate candidates: normalised title + first-author surname
+orphan_dirs()  # directories on disk with no row in metadata.db
 ```
 
 ```python

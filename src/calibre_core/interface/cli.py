@@ -73,8 +73,10 @@ def cmd_books(_args: argparse.Namespace, as_json: bool) -> int:
         print(json.dumps(rows, ensure_ascii=False))
     else:
         for r in rows:
-            print(f"{r['id']:>5}  {r['title'][:60]:<60}  {'/'.join(r['formats']) or '-':<10}"
-                  f"  {r['authors'][:40]}")
+            print(
+                f"{r['id']:>5}  {r['title'][:60]:<60}  {'/'.join(r['formats']) or '-':<10}"
+                f"  {r['authors'][:40]}"
+            )
     return 0
 
 
@@ -164,7 +166,9 @@ def main(argv: list[str] | None = None) -> int:
         help="library root holding metadata.db (default: $CALIBRE_LIBRARY, else ~/Calibre Library)",
     )
     common.add_argument(
-        "--json", action="store_true", default=argparse.SUPPRESS,
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
         help="machine-readable JSON on stdout",
     )
 

@@ -34,6 +34,7 @@ def _sim(a: str, b: str) -> float:
     """Normalised Indel similarity, 0..1. The one primitive everything uses."""
     return Indel.normalized_similarity(a, b)
 
+
 DEFAULT_THRESHOLD = 0.55
 DEFAULT_MARGIN = 0.15
 
@@ -82,8 +83,10 @@ def search(
     for b in books:
         bid = b.id if hasattr(b, "id") else b[0]
         title = b.title if hasattr(b, "title") else b[1]
-        authors = b.authors_str if hasattr(b, "authors_str") else (
-            b.authors if hasattr(b, "authors") else b[2]
+        authors = (
+            b.authors_str
+            if hasattr(b, "authors_str")
+            else (b.authors if hasattr(b, "authors") else b[2])
         )
         if not isinstance(authors, str):
             authors = " & ".join(authors)

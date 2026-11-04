@@ -97,9 +97,7 @@ def excused(a: int, b: int, pairs: dict[int, set[int]]) -> bool:
 _excused = excused
 
 
-def excused_within(
-    book_id: int, candidates: Iterable[int], pairs: dict[int, set[int]]
-) -> bool:
+def excused_within(book_id: int, candidates: Iterable[int], pairs: dict[int, set[int]]) -> bool:
     """Is `book_id` excused against at least one OTHER member of `candidates`?
 
     The helper both consumers actually wanted, and the reason it is here rather
@@ -183,17 +181,13 @@ def size_groups(
         if len(uniq) < 2:
             continue
         ids = list(uniq)
-        if respect_dupok and all(
-            excused(x, y, pairs) for x in ids for y in ids if x != y
-        ):
+        if respect_dupok and all(excused(x, y, pairs) for x in ids for y in ids if x != y):
             continue
         groups.append([uniq[i] for i in sorted(uniq)])
     return sorted(groups, key=lambda g: g[0].id)
 
 
-def isbn_groups(
-    books: list[Book] | None = None, db: Path | None = None
-) -> list[list[Book]]:
+def isbn_groups(books: list[Book] | None = None, db: Path | None = None) -> list[list[Book]]:
     """Group by identical cleaned ISBN — same edition, per the publisher."""
     books = books if books is not None else load_books(db)
     buckets: dict[str, list[Book]] = defaultdict(list)

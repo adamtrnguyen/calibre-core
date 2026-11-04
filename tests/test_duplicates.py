@@ -43,6 +43,7 @@ def _set_dupok_raw(library, book_id: int, raw: str) -> None:
 # sha256
 # --------------------------------------------------------------------------
 
+
 def test_sha256_matches_hashlib(library):
     p = library.add(1, "A Book", content=b"%PDF-1.4\nexact bytes\n")
     assert sha256(p) == hashlib.sha256(b"%PDF-1.4\nexact bytes\n").hexdigest()
@@ -58,6 +59,7 @@ def test_sha256_is_chunk_size_invariant(library):
 # --------------------------------------------------------------------------
 # dupok_pairs
 # --------------------------------------------------------------------------
+
 
 def test_no_dupok_column_means_no_exemptions(library):
     """A library that never created the column must not error — most won't."""
@@ -126,6 +128,7 @@ def test_excused_is_symmetric_and_fails_open(library):
 # excused / excused_within -- the public pairwise API
 # --------------------------------------------------------------------------
 
+
 def test_underscore_excused_still_resolves_to_the_public_name():
     """`_excused` shipped in 0.1.0 and this package is consumed by tag. Promoting
     it to `excused` without an alias would break importers on upgrade for no
@@ -180,6 +183,7 @@ def test_excused_within_with_no_partners_recorded_is_not_excused():
 # --------------------------------------------------------------------------
 # title_groups
 # --------------------------------------------------------------------------
+
 
 def test_groups_two_editions_of_the_same_work(library):
     library.add(2, "The Craft of Research (4th Edition)", authors="Wayne C. Booth")
@@ -262,6 +266,7 @@ def test_cjk_titles_group_and_do_not_collapse_together(library):
 # size_groups -- the signal no title check can replace
 # --------------------------------------------------------------------------
 
+
 def test_finds_the_same_file_under_two_different_titles(library):
     """Real ids 954 and 995: byte-identical, catalogued twice, ~50 MB wasted, and
     no title-based check could ever see it."""
@@ -324,6 +329,7 @@ def test_dupok_suppresses_a_size_pair_too(library):
 # --------------------------------------------------------------------------
 # isbn_groups
 # --------------------------------------------------------------------------
+
 
 def test_identical_isbns_group(library):
     """Real defect this catches: books 49 and 1057 both carry `4412957810`, an

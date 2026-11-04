@@ -48,8 +48,7 @@ def calibredb_path() -> str:
 def gui_is_open() -> bool:
     """True if the Calibre GUI is running."""
     return (
-        subprocess.run(["pgrep", "-x", "calibre"], capture_output=True, check=False).returncode
-        == 0
+        subprocess.run(["pgrep", "-x", "calibre"], capture_output=True, check=False).returncode == 0
     )
 
 
@@ -75,15 +74,18 @@ def _content_server_url() -> str | None:
     """Probe for a running Calibre content server with local-write enabled."""
     import urllib.error
     import urllib.request
+
     for port in _candidate_ports():
         url = f"http://localhost:{port}"
         try:
             with urllib.request.urlopen(url, timeout=2) as resp:
                 if resp.status == 200:
                     r = subprocess.run(
-                        [calibredb_path(), "list", "--limit", "1",
-                         "--with-library", f"{url}/#-"],
-                        capture_output=True, text=True, check=False, timeout=10,
+                        [calibredb_path(), "list", "--limit", "1", "--with-library", f"{url}/#-"],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=10,
                     )
                     if r.returncode == 0 and r.stdout.strip():
                         lib = r.stdout.strip().splitlines()[0].strip()
@@ -128,7 +130,9 @@ def run_calibredb(args: list[str]) -> str:
             )
     r = subprocess.run(
         [calibredb_path(), *args, "--with-library", lib_target],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if r.returncode != 0:
         raise WriteBlocked(f"calibredb failed: {(r.stderr or '').strip()[:400]}")
@@ -140,9 +144,8 @@ def current_identifiers(book_id: int) -> dict[str, str]:
     con = connect()
     try:
         return {
-            t: v for t, v in con.execute(
-                "SELECT type, val FROM identifiers WHERE book=?", (book_id,)
-            )
+            t: v
+            for t, v in con.execute("SELECT type, val FROM identifiers WHERE book=?", (book_id,))
         }
     finally:
         con.close()

@@ -89,8 +89,13 @@ def path_case_drift(db: Path | None = None) -> list[dict]:
             ci = [n for n in names if n.casefold() == part.casefold()]
             if ci:
                 out.append(
-                    {"id": bid, "title": title, "expected": part, "on_disk": ci[0],
-                     "parent": str(cur.relative_to(lib)) or "."}
+                    {
+                        "id": bid,
+                        "title": title,
+                        "expected": part,
+                        "on_disk": ci[0],
+                        "parent": str(cur.relative_to(lib)) or ".",
+                    }
                 )
             break
     return out

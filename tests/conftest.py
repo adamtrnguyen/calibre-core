@@ -108,9 +108,7 @@ class LibraryBuilder:
             # fixture that faked a `books.publisher` column would let a query
             # against a column that does not exist pass here and fail on the real
             # library.
-            row = con.execute(
-                "SELECT id FROM publishers WHERE name = ?", (publisher,)
-            ).fetchone()
+            row = con.execute("SELECT id FROM publishers WHERE name = ?", (publisher,)).fetchone()
             if row:
                 pid = row[0]
             else:

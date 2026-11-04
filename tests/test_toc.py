@@ -40,6 +40,7 @@ def gui_closed(monkeypatch):
 # sanitize_outline — the three rules pymupdf raises on
 # --------------------------------------------------------------------------
 
+
 def test_first_entry_is_forced_to_level_one():
     """A printed TOC often starts at a sub-heading, and `set_toc` raises if the
     first entry is not level 1 — so the whole book would fail over one entry."""
@@ -109,6 +110,7 @@ def test_titles_have_their_whitespace_collapsed():
 # has_outline — the all-empty-titles case
 # --------------------------------------------------------------------------
 
+
 def test_an_outline_of_empty_titles_does_not_count_as_an_outline(tmp_path):
     """Structurally present, useless to a reader, invisible to an extractor —
     which is how such a file lands in an injection work list. Counting it would
@@ -125,6 +127,7 @@ def test_a_real_outline_counts(tmp_path):
 # --------------------------------------------------------------------------
 # the gate — a batch precondition, so it RAISES
 # --------------------------------------------------------------------------
+
 
 def test_an_open_gui_raises_rather_than_returning_a_reason(tmp_path, monkeypatch):
     """This is the reason the function moved into calibre-core: as
@@ -152,6 +155,7 @@ def test_the_gate_fires_before_the_file_is_even_opened(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------
 # per-file outcomes — returned, so a batch keeps going
 # --------------------------------------------------------------------------
+
 
 def test_a_missing_file_is_a_returned_reason(tmp_path, gui_closed):
     out = inject_outline(
@@ -190,6 +194,7 @@ def test_replace_existing_overrides_the_idempotence_guard(tmp_path, gui_closed):
 # --------------------------------------------------------------------------
 # the success path, and what it guarantees
 # --------------------------------------------------------------------------
+
 
 def test_a_successful_injection_writes_the_outline_and_keeps_a_backup(tmp_path, gui_closed):
     p = _pdf(tmp_path / "book.pdf", pages=8)
@@ -239,6 +244,7 @@ def test_no_temp_file_is_left_behind_on_success(tmp_path, gui_closed):
 # --------------------------------------------------------------------------
 # the failure this whole design exists for
 # --------------------------------------------------------------------------
+
 
 def test_a_failed_verification_leaves_the_original_untouched(tmp_path, gui_closed, monkeypatch):
     """The defended failure is a save that SUCCEEDS and damages the file. Forcing

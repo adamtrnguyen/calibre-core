@@ -56,12 +56,32 @@ _SUFFIXES = frozenset({"jr", "sr", "ii", "iii", "iv", "phd", "md", "esq"})
 # hit the `[^a-z0-9...]` class as punctuation and became a SPACE, which SPLIT the
 # word: `Nørsett` keyed to 'rsett' and `Łupkowski` to 'upkowski' -- the leading
 # letter of the surname silently gone. Mapped explicitly instead.
-_ATOMIC_FOLDS = str.maketrans({
-    "ø": "o", "Ø": "O", "ł": "l", "Ł": "L", "đ": "d", "Đ": "D",
-    "ð": "d", "Ð": "D", "þ": "th", "Þ": "Th", "ħ": "h", "Ħ": "H",
-    "ŧ": "t", "Ŧ": "T", "ı": "i", "ŋ": "n", "Ŋ": "N",
-    "æ": "ae", "Æ": "Ae", "œ": "oe", "Œ": "Oe", "ß": "ss",
-})
+_ATOMIC_FOLDS = str.maketrans(
+    {
+        "ø": "o",
+        "Ø": "O",
+        "ł": "l",
+        "Ł": "L",
+        "đ": "d",
+        "Đ": "D",
+        "ð": "d",
+        "Ð": "D",
+        "þ": "th",
+        "Þ": "Th",
+        "ħ": "h",
+        "Ħ": "H",
+        "ŧ": "t",
+        "Ŧ": "T",
+        "ı": "i",
+        "ŋ": "n",
+        "Ŋ": "N",
+        "æ": "ae",
+        "Æ": "Ae",
+        "œ": "oe",
+        "Œ": "Oe",
+        "ß": "ss",
+    }
+)
 
 # Apostrophes are DELETED, not space-substituted, because an apostrophe inside a
 # surname is part of ONE name -- the same argument the hyphen already won. As a

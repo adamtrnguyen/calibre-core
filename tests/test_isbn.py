@@ -19,18 +19,21 @@ from calibre_core.domain.isbn import (
 # Real ISBNs from books acquired this session.
 YEARWORTH_13 = "9781119744825"
 HUNTER_10 = "0471830062"
-LAMBOURNE_10 = "185573348X"      # trailing X check digit
+LAMBOURNE_10 = "185573348X"  # trailing X check digit
 GIBSON_13 = "9783030561260"
 
 
-@pytest.mark.parametrize("raw", [
-    YEARWORTH_13,
-    "978-1-119-74482-5",
-    "978 1 119 74482 5",
-    "ISBN: 978-1-119-74482-5",
-    "isbn-13: 9781119744825",
-    "  9781119744825  ",
-])
+@pytest.mark.parametrize(
+    "raw",
+    [
+        YEARWORTH_13,
+        "978-1-119-74482-5",
+        "978 1 119 74482 5",
+        "ISBN: 978-1-119-74482-5",
+        "isbn-13: 9781119744825",
+        "  9781119744825  ",
+    ],
+)
 def test_prefix_and_punctuation_are_tolerated(raw):
     """This is what the wrapper adds — isbnlib.canonical alone keeps the prefix."""
     assert clean_isbn(raw) == YEARWORTH_13

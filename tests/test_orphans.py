@@ -17,6 +17,7 @@ from calibre_core.infrastructure.orphans import missing_formats, orphan_dirs, pa
 # orphan_dirs -- a directory the catalogue does not know about
 # --------------------------------------------------------------------------
 
+
 def test_finds_a_directory_with_no_database_row(library):
     """The state a metadata.db rollback leaves: the catalogue reverts, the
     filesystem does not. Invisible to the GUI and to `calibredb list`, but
@@ -101,6 +102,7 @@ def test_comic_and_text_formats_count_as_books(library):
 # missing_formats -- the reverse: a row whose file is gone
 # --------------------------------------------------------------------------
 
+
 def test_finds_a_row_whose_file_is_absent(library):
     """The direction the old one-way check could not see at all. A record that
     looks fine in the GUI and opens to nothing."""
@@ -121,6 +123,7 @@ def test_no_missing_formats_when_every_file_is_present(library):
 # --------------------------------------------------------------------------
 # path_case_drift -- the one that hides until an rsync
 # --------------------------------------------------------------------------
+
 
 def test_detects_a_case_only_path_difference(library):
     """On case-insensitive APFS `JOHN MONTAGUE/` satisfies a lookup for

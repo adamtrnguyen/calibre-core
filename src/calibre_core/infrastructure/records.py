@@ -63,7 +63,7 @@ def _query(db: Path | None, root: Path, book_id: int | None = None) -> list[Book
         con.close()
 
     out: list[Book] = []
-    for (bid, title, path, uuid, ts, pub, lastmod, authors, tags, isbn, publisher) in rows:
+    for bid, title, path, uuid, ts, pub, lastmod, authors, tags, isbn, publisher in rows:
         pairs = fmts.get(bid, [])
         out.append(
             Book(

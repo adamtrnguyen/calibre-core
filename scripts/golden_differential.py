@@ -9,6 +9,7 @@ test: every check would compare calibre_core against itself and report
 
 Run from the package root: `uv run python scripts/golden_differential.py`
 """
+
 import os
 import re
 import sys
@@ -50,9 +51,16 @@ books = new_load()
 # finds Andersen, Fairchild, "Perspektive" and "Können" through them. The inline
 # directive below is what stops codespell from "fixing" the fixture and quietly
 # turning a typo-tolerance check into an exact-match one.
-QUERIES = ["kirsti anderson", "perspektive", "konnen", "geometry of art",
-           "fairchilde color apearance",  # codespell:ignore
-           "陶哲轩", "zzzqqq nonexistent", "vollmar optik"]
+QUERIES = [
+    "kirsti anderson",
+    "perspektive",
+    "konnen",
+    "geometry of art",
+    "fairchilde color apearance",  # codespell:ignore
+    "陶哲轩",
+    "zzzqqq nonexistent",
+    "vollmar optik",
+]
 same = 0
 for q in QUERIES:
     ro = old.fuzzy_search(q)
@@ -74,9 +82,12 @@ for q in QUERIES:
         print("    gained (not a regression):", sorted(gained))
 print(f"search: {same}/{len(QUERIES)} identical")
 
+
 # 3. duplicate_groups -> new must be a SUPERSET whose additions are only CJK
 def idsets(groups, key):
     return {frozenset(key(x) for x in g) for g in groups}
+
+
 og = idsets(old.duplicate_groups(), lambda d: d["id"])
 ng = idsets(newdup.title_groups(books, respect_dupok=False), lambda b: b.id)
 lost, gained = og - ng, ng - og
