@@ -18,6 +18,7 @@ Every test runs against a throwaway library. None touches the real one.
 from __future__ import annotations
 
 import sqlite3
+import subprocess
 import unicodedata
 from pathlib import Path
 
@@ -520,6 +521,38 @@ def test_gui_open_never_routes_a_non_configured_library_to_the_server(library, m
     monkeypatch.setattr(cdb.subprocess, "run", lambda *a, **k: pytest.fail("calibredb was run"))
     with pytest.raises(WriteBlocked, match="not the configured library"):
         cdb.run_calibredb(["set_metadata", "1", "--field", "title:x"])
+
+
+def test_gui_closed_refuses_a_non_configured_library_under_a_database_override(
+    library, monkeypatch
+):
+    """A database override (macos-env.txt) wins over --with-library for every calibre binary,
+    so a write aimed at a fixture or an export would land in the live database."""
+    import calibre_core.infrastructure.calibredb as cdb
+
+    monkeypatch.setattr(cdb, "gui_is_open", lambda: False)
+    monkeypatch.setattr(cdb, "override_db_path", lambda: Path("/live/metadata.db"))
+    monkeypatch.setattr(cdb.subprocess, "run", lambda *a, **k: pytest.fail("calibredb was run"))
+    with pytest.raises(WriteBlocked, match="database override"):
+        cdb.run_calibredb(["set_metadata", "1", "--field", "title:x"])
+
+
+def test_gui_closed_without_an_override_writes_the_named_library(library, monkeypatch):
+    """No redirect, no refusal: a write to another library goes to that library."""
+    import calibre_core.infrastructure.calibredb as cdb
+
+    seen = {}
+
+    def fake_run(cmd, **_):
+        seen["cmd"] = cmd
+        return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(cdb, "gui_is_open", lambda: False)
+    monkeypatch.setattr(cdb, "override_db_path", lambda: None)
+    monkeypatch.setattr(cdb, "calibredb_path", lambda: "calibredb")
+    monkeypatch.setattr(cdb.subprocess, "run", fake_run)
+    assert cdb.run_calibredb(["list"]) == "ok"
+    assert seen["cmd"][-2:] == ["--with-library", str(cdb.library_path())]
 
 
 def test_content_server_probe_falls_back_to_guesses_without_a_config(tmp_path, monkeypatch):

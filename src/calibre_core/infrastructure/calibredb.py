@@ -14,6 +14,7 @@ from calibre_core.infrastructure.sqlite import (
     connect,
     db_path,
     library_path,
+    override_db_path,
 )
 
 # Where the content server's own settings live. Its `port` line is the truth about
@@ -105,16 +106,23 @@ def backup_db(dest_dir: str = "/tmp/calibre-db-backups") -> str:
 def run_calibredb(args: list[str]) -> str:
     """Execute a calibredb command, routing through the content server if needed."""
     lib_target = str(library_path())
-    if gui_is_open():
-        # The content server writes to its own library, so route only the configured library.
-        # See docs/history/concurrent-qa-gate.md.
-        if library_path().resolve() != configured_library().resolve():
+    # A write aimed at any library but the configured one lands in the live database whenever
+    # Calibre redirects it: the content server writes to its own library, and an override
+    # (macos-env.txt, read by every binary in calibre.app) wins over --with-library.
+    if library_path().resolve() != configured_library().resolve():
+        redirect = (
+            "the GUI is open and the content server writes to its own library"
+            if gui_is_open()
+            else f"calibredb would write {override_db_path()} (database override)"
+            if override_db_path()
+            else None
+        )
+        if redirect:
             raise WriteBlocked(
-                "Calibre GUI is open and the target is not the configured library — "
-                "refusing to route through the content server, which writes to its "
-                "own library",
+                f"the target is not the configured library and {redirect} — refusing",
                 {"target": str(library_path()), "configured": str(configured_library())},
             )
+    if gui_is_open():
         server_url = _content_server_url()
         if server_url:
             lib_target = server_url
