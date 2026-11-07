@@ -7,6 +7,8 @@ actual save-verify-replace cycle can answer that.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from calibre_core.domain.write_rules import WriteBlocked
@@ -179,6 +181,26 @@ def test_an_existing_outline_is_skipped_so_reruns_are_idempotent(tmp_path, gui_c
     # and the existing outline is untouched
     with pymupdf.open(str(p)) as doc:
         assert [t[1] for t in doc.get_toc(simple=True)] == ["Already"]
+
+
+def test_a_save_that_raises_leaves_no_temp_file_and_the_original_untouched(
+    tmp_path, gui_closed, monkeypatch
+):
+    """Malformed PDFs make MuPDF's save raise ("invalid key in dict"); the partial temp
+    file used to stay in the book's folder, inside the library."""
+    p = _pdf(tmp_path / "book.pdf")
+    original = p.read_bytes()
+
+    def broken_save(self, *a, **k):
+        Path(a[0]).write_bytes(b"%PDF-partial")
+        raise RuntimeError("code=8: invalid key in dict")
+
+    monkeypatch.setattr(pymupdf.Document, "save", broken_save)
+    out = inject_outline(p, [{"level": 1, "title": "C", "pdf_page": 1}], tmp_path / "bak")
+    assert out["ok"] is False and "save failed" in out["reason"]
+    assert not p.with_suffix(".tocinject.pdf").exists()
+    assert p.read_bytes() == original
+    assert not (tmp_path / "bak").exists()  # nothing to back up: nothing was replaced
 
 
 def test_replace_existing_overrides_the_idempotence_guard(tmp_path, gui_closed):

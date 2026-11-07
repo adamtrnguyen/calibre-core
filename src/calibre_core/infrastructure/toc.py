@@ -120,9 +120,15 @@ def inject_outline(
             return {"ok": False, "reason": "no injectable entries after sanitizing"}
         sample = [0, doc.page_count // 2]
         before = [doc[i].get_text() for i in sample]
-        doc.set_toc(toc)
         tmp = path.with_suffix(".tocinject.pdf")
-        doc.save(str(tmp))
+        try:
+            doc.set_toc(toc)
+            doc.save(str(tmp))
+        except Exception as exc:  # noqa: BLE001 - a malformed PDF is one skipped file
+            # A save that raises can leave a partial temp file in the book's folder,
+            # where Calibre and omni-rag would see it. Remove it; the original is untouched.
+            tmp.unlink(missing_ok=True)
+            return {"ok": False, "reason": f"save failed: {type(exc).__name__}: {exc}"[:200]}
 
     try:
         with pymupdf.open(str(tmp)) as chk:
