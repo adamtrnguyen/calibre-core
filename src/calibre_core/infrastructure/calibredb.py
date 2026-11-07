@@ -30,6 +30,18 @@ _CALIBREDB_FALLBACKS = (
     "/Applications/calibre.app/Contents/MacOS/calibredb",
 )
 
+# With a proxy in the environment, calibredb prints "Using proxies: {...}" as the FIRST
+# LINE OF STDOUT. Under opencode's campus-proxy shell that line
+# was taken as the content server's library id, so every write with the GUI open asked
+# for library "#Using proxies: {...}" and failed "Not Found". calibredb here only ever
+# talks to a local library or the localhost content server, so it gets no proxy at all.
+_PROXY_VARS = {"http_proxy", "https_proxy", "all_proxy"}
+
+
+def _calibredb_env() -> dict[str, str]:
+    """This process's environment minus proxy variables (either case)."""
+    return {k: v for k, v in os.environ.items() if k.lower() not in _PROXY_VARS}
+
 
 def calibredb_path() -> str:
     """Locate the `calibredb` binary, PATH first."""
@@ -86,6 +98,7 @@ def _content_server_url() -> str | None:
                         text=True,
                         check=False,
                         timeout=10,
+                        env=_calibredb_env(),
                     )
                     if r.returncode == 0 and r.stdout.strip():
                         lib = r.stdout.strip().splitlines()[0].strip()
@@ -138,6 +151,7 @@ def run_calibredb(args: list[str]) -> str:
         capture_output=True,
         text=True,
         check=False,
+        env=_calibredb_env(),
     )
     if r.returncode != 0:
         raise WriteBlocked(f"calibredb failed: {(r.stderr or '').strip()[:400]}")

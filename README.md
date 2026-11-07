@@ -20,7 +20,7 @@ Calibre record, and is it valid". The divergent copies it replaced:
 dependencies = ["calibre-core"]
 
 [tool.uv.sources]
-calibre-core = { git = "https://github.com/adamtrnguyen/calibre-core", tag = "v0.9.1" }
+calibre-core = { git = "https://github.com/adamtrnguyen/calibre-core", tag = "v0.9.2" }
 ```
 
 `pymupdf` is an optional extra (`calibre-core[pdf]`), needed only by the two

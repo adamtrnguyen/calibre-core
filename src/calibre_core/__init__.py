@@ -81,7 +81,7 @@ from calibre_core.infrastructure.sqlite import (
 )
 from calibre_core.infrastructure.toc import has_outline, inject_outline, sanitize_outline
 
-__version__ = "0.9.1"
+__version__ = "0.9.2"
 
 # `audit` and `openlibrary` are deliberately NOT re-exported here, and are
 # reached as `from calibre_core.application.audit import ...`. They are report TOOLS with

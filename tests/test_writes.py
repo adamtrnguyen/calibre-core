@@ -555,6 +555,29 @@ def test_gui_closed_without_an_override_writes_the_named_library(library, monkey
     assert seen["cmd"][-2:] == ["--with-library", str(cdb.library_path())]
 
 
+def test_calibredb_runs_without_proxy_variables(library, monkeypatch):
+    """A proxy makes calibredb print 'Using proxies: {...}' as stdout's first line, which
+    the content-server probe then took for the library id (2026-11-06, opencode's shell)."""
+    import calibre_core.infrastructure.calibredb as cdb
+
+    for var in ("HTTP_PROXY", "https_proxy", "ALL_PROXY"):
+        monkeypatch.setenv(var, "http://127.0.0.1:8118")
+    monkeypatch.setenv("NO_PROXY", "localhost")
+    seen = {}
+
+    def fake_run(cmd, **kw):
+        seen["env"] = kw["env"]
+        return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(cdb, "gui_is_open", lambda: False)
+    monkeypatch.setattr(cdb, "override_db_path", lambda: None)
+    monkeypatch.setattr(cdb, "calibredb_path", lambda: "calibredb")
+    monkeypatch.setattr(cdb.subprocess, "run", fake_run)
+    assert cdb.run_calibredb(["list"]) == "ok"
+    assert not {"HTTP_PROXY", "https_proxy", "ALL_PROXY"} & set(seen["env"])
+    assert seen["env"]["NO_PROXY"] == "localhost"  # only proxy variables are dropped
+
+
 def test_content_server_probe_falls_back_to_guesses_without_a_config(tmp_path, monkeypatch):
     import calibre_core.infrastructure.calibredb as cdb
 
